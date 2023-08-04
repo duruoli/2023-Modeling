@@ -20,7 +20,7 @@ Class Project, Modeling Process, GLM, Non-parametric, Hierarchical
   - additive
   - "generalized" version
   - interpretation & diagnositc
-  - 
+    
 - Project4: "revise" 
   - Missing issue: multiple imputation, truncation & censoring
   - Model selection: bootstrap, metrics
