@@ -1,0 +1,367 @@
+---
+title: "STAT353 HW2 GLM"
+author: "Duruo Li"
+date: "Jan 26 2023"
+output: html_document
+---
+
+## Handwork
+
+*My policy on handwork is that it is required for Statistics PhD students and MS in Statistics students. It is encouraged (but not required) for MS in Applied Statistics and all other students. (If you are the latter, you will not get penalized if you get these wrong ... )*
+
+Exercises from the book: 14.1, 14.3, 14.6, 15.2, 15.4.
+
+### 14.1
+```{r}
+p<-c(.001,.01,.05,.1,.3,.5,.7,.9,.95,.99,.999)
+var<-p*(1-p)
+rbind(p,var)
+```
+
+Answer: When $\pi$ is close to 0 or 1, the heteroscedasticity problem is serious.
+
+### 14.3, 14.6, 15.2, 15.4
+
+```{r echo=FALSE, out.width = '80%'}
+knitr::include_graphics("./HW2/1.jpg")
+knitr::include_graphics("./HW2/2.jpg")
+```
+
+
+You can type your answers and submit within this file *or* you can do this work on paper and submit a scanned copy (be sure it is legible).
+
+## Data analysis
+```{r setup ,warning=FALSE,message=FALSE,error=FALSE, fig.height=4, fig.width=6, fig.align = "center"}
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,error=FALSE)
+```
+### **1. Exercise D14.1 (Dichotomous)**
+
+For this question, we will use the `Chile.txt` dataset, which has a polytomous outcome: voting intention (yes, no, abstain, undecided). For this problem, focus only on the subset of the data with outcomes of either 'yes' or 'no'.
+
+(a) Formulate a model that makes substantive sense in the context of the data set - for example,constructing dummy regressors to represent factors and including interaction regressors where these are appropriate - and fit a linear logistic regression of the response variable on the explanatory variables, reporting the estimated regression coefficients and their asymptotic standard errors.
+
+Answer: 
+
+From the voting background, I think region, age, sex, education, income and status all could have intersection effects with each other, e.g., for people with different education level, income level has different effects on their voting choices. But from my point of view, population's effect won't be influenced so significantly by other factors. 
+
+Thus, I add 'population' as an individual predictor, while others as both individual and intersective predictors. 
+
+```{r}
+library(dplyr)
+df0<-read.table("./data/Chile.txt", stringsAsFactors=TRUE)
+df1<-df0 %>%
+  filter(vote=="Y" | vote=="N") %>%
+  na.omit()
+
+fit.0<-glm(vote~(region+sex+age+education+income+statusquo)^2++population, family = binomial, data=df1)
+#fit.0<-glm(vote~region+population+sex+age+education+income+statusquo+sex*income+age*income+sex*statusquo+age*statusquo, family = binomial, data=df1)
+summary(fit.0)
+```
+
+(b) Construct an analysis-of-deviance table for the model fit in part (a).
+
+```{r}
+library("car")
+Anova(fit.0, test="LR")
+```
+
+
+(c) Fit a final model to the data that includes the statistically significant effects. Construct an effect display for each high-order term in the model. If the model is additive, (i) suggest two interpretations of each estimated coefficient; and (ii) construct likelihood-ratio-based 95- percent confidence intervals for the regression coefficients, comparing these with confidence intervals based on the Wald statistic.
+
+Answer:
+
+I choose predictors which are statistically significant in both Wald's Test and LR Test.
+```{r}
+fit.1<-glm(vote~sex+education+statusquo+region*statusquo+sex*education+education*income, family = binomial, data=df1)
+library(effects)
+plot(predictorEffects(fit.1, ~income, lines=list(multiline=TRUE))) # education*income
+plot(predictorEffects(fit.1, ~statusquo, lines=list(multiline=TRUE))) # region*statusquo
+plot(predictorEffects(fit.1, ~sex, lines=list(multiline=TRUE))) # sex*education
+```
+
+(i) suggest two interpretations of each estimated coefficient
+
+- From odds level
+```{r}
+summary(fit.1)
+```
+Intercept: for female living at central Chile, whose has no income, education level is primary, the scale of support for status-quo is 0, the average vote odd is $e^{1.413}$
+
+sexM (including intersection term): keep other predictors fixed, male's voting odds is $e^{-1.029+0.7822educationPS_i+1.109educationS_i}$ times female's voting odds, i.e., for different education level groups of people, the voting odds' differences between gender is different. This is also shown in the sex effect plot, e.g., among primary education level people, male is obviously less likely (the odds is $e^{-1.029}$ times smaller) than female to vote Yes, while in secondary group, this difference is very small.
+
+educationPS (educationS is just the same): keep other predictors fixed, on average, the voting odds of people with post secondary education level is $e^{-1.273+0.7822sexM_i-1.786e-05income_i}$ times people with primary education level's voting odds. Thus, the effect of education level on voting is related with both gender and income.
+
+statusquo: Use $\eta_i$ to represent the linear combination of predictors. Keep other predictors fixed, on average, with a unit increase in the scale of support for the status-quo (in fact, I have no idea what's exactly one unit mean for this predictor...), the odds of voting Yes will be $e^{\eta_i}*(4.017-1.86regionM_i-1.334regionN_i-0.9096regionS_i-0.5848regionSA_i$ times of change. I.e., the effect of statusquo on voting is different among different regions, but the overall correlation is positive, i.e., the greater the scale of support for stautus-quo is, the more likely people are going to vote Yes.
+
+regionM (the other region dummy variables are just the same): keep other predictors fixed, on average, the voting odds of people living at Metropolitan Santiago area in Chile is $e^{-0.008195-1.86statusquo_i}$ times voting odds of people living at Central Chile. Thus, the effect is related with scale of support for status-quo, to be more specific, the greater the scale, the negative effect is greater, i.e., in comparison with people living at central Chile, people living in other areas are less likely to vote Yes, and the greater the scale of support for status-quo is, the more less likely for them to vote Yes. This conclusion also holds for other regions.
+
+income: Use $\eta_i$ to represent the linear combination of predictors. Keep other predictors fixed, on average, when people's monthly incomes increase by one Pesos, the odds of voting Yes will be $e^{\eta_i}*(1.835-1.786educationPS_i-3.038educationS_i)*10^{-5}$ times of change. I.e., the effect of income on voting is different among people with different education level, and this distinction is quite significant. For people who have primary education level, the higher their monthly income is, the more likely they are going to vote yes; for people with secondary education level, the effect is on the contrary; for people with education level even higher, it seems that income level doesn't affect the voting preference.
+
+- From probability level (centered-model)
+
+Intercept:
+At the mean level of all the factors, $logit^{-1}(1.413)$ is the estimated probability of voting yes.
+
+sex, education, region, income: use $\beta_k$ to represent the coefficient of those predictors, since $\beta/4$ rule applies to all of them, I will interpret them at a time. At the mean level of all the other predictors (what does it mean for sex to be at the mean level???), each one unit of change in this covariate (one Pesos, one unit of scale of support) corresponding to at most $\beta_k/4$ difference in probability of voting yes.
+
+intersection: A X B (A and B represent two covariates), if the coefficient of A*B has the same sign with coefficient of A, the importance of A's effect on the probability of voting yes increases with higher B (if B is a indicator variable, then ...of voting yes increases with B property in comparison with baseline property)
+
+```{r}
+center_colmeans <- function(x) {
+    xcenter = colMeans(x)
+    x - rep(xcenter, rep.int(nrow(x), ncol(x)))
+}
+X <- model.matrix(terms(fit.1), data = model.frame(fit.1))
+
+X.c<-center_colmeans(X)
+fit.1.c<-glm(df1$vote~X, family = binomial)
+summary(fit.1.c)
+```
+
+- Marginal Effect (average predictive difference)
+
+It's the average effects of all the coefficients, i.e., with a unit of change in the predictor, the average change in the response (but I am not sure it's the effects on logit of p or directly on the probability?)
+```{r}
+library(margins)
+margins(fit.1)
+```
+
+
+(ii) construct likelihood-ratio-based 95- percent confidence intervals for the regression coefficients, comparing these with confidence intervals based on the Wald statistic.
+
+We can find that these two confidence intervals are different, that's because they are based on different statistics.
+
+```{r}
+library(MASS)
+# likelihood confidence interval
+confint(fit.1)
+# Wald confidence interval
+confint.default(fit.1)
+```
+
+
+(d) Fit a probit model to the data, comparing the results to those obtained with the logit model. Which do you think is better? Why?
+
+Answer:
+
+Logit model is better. Because these two models have similar residual deviance and AIC, which means that their abilities to fit the data are similar. But log-odds (odds) have intuitive interpretation which are much easier to interpret and understand than inverse function of normal distribution function.
+
+```{r}
+fit.1.p<-glm(vote~sex+education+statusquo+region*statusquo+sex*education+education*income, family = binomial(link = "probit"), data=df1)
+summary(fit.1.p)
+summary(fit.1)
+```
+
+### **2. Exercise D14.2 (Polytomous outcome)**
+
+Proceed as in Exercise D14.1, but now include all of the data and the four possible outcome values.
+
+Use, as appropriate, one or more of the following: a multinomial logit model; a proportional odds logit model; logit models fit to a set of nested dichotomies; or similar probit models. If you fit the proportional-odds model, test the assumption of parallel regressions. If you fit more than one kind of model, which model do you prefer? Why?
+
+Answer: I prefer the multinomial logit model. 
+
+First, a proportional odds logit model need to meet the assumption of parallel regressions, i.e., the effects of all predictors (slope) are the same for different voting choice groups, but it's hard to justify it without prior theoretical support.
+
+Second, nested dichotomies are suitable for data in which some specific dichotomies have strong explanatory meaning. Although, in some way, {{abstain}, {undecided}};{{yes}, {no}} seems to be a reasonable dichotomies, I would prefer to use more generalized model to avoid making too subjective assumptions ahead of time (before experiment).
+
+```{r}
+# multinomial 
+library(nnet)
+df2<-df0 %>%
+  na.omit()
+fit.mul<-multinom(vote~sex+education+statusquo+region*statusquo+sex*education+education*income, data = df2, trace=FALSE)
+summary(fit.mul)
+```
+
+### **3. Exercise D15.3 (GLM Diagnostics)**
+
+Return to the logit (and probit) model that you fit in Exercise D14.1.
+
+(a) Use the diagnostic methods for generalized linear models described in this chapter to check the adequacy of the final model that you fit to the data.
+
+Answer:
+
+From the Cook's distance plot, we can find at least one influential point obs 2662. But from the leverage plot, it's not a high-leverage point, thus, it might has a large residual, i.e., an outlier.
+```{r}
+library(faraway)
+#leverage point
+halfnorm(hatvalues(fit.1))
+# Cook's distance
+plot(fit.1, which = 4, id.n = 3)
+
+```
+
+- Non-linearity
+
+Due to the deviance plots against predicted lineage combination of predictors($\eta$), there is a pattern which is not random, thus, the lineage relationship between X and canonical parameter of Y's distribution is not very accurate.
+
+Considering the deviance plots against continuous predictors statusquo and income, statusquo's plot also shows specific pattern, which larger statusquo tends to have positive deviance, while smaller one tends to have negative deviance. As for income's plot, due to the limited levels of values, it's hard to judge the pattern.
+
+In conclusion, we might introduce non-linear relationship into the model.
+
+```{r}
+library(arm)
+# predicted values
+x<-predict(fit.1,type="link")
+y<-residuals(fit.1)
+binnedplot(x,y,xlab=expression(hat(eta)),ylab="Deviance residuals")
+# statusquo
+x<-df1$statusquo
+y<-residuals(fit.1)
+binnedplot(x,y,xlab="statusquo",ylab="Deviance residuals")
+# income
+x<-df1$income
+y<-residuals(fit.1)
+binnedplot(x,y,xlab="income", ylab="Deviance residuals")
+```
+But due to the goodness of fit test, since we cannot reject null hypothesis, the predicted values approximate the observed values well, i.e., the model makes sense in terms of prediction.
+```{r}
+library("regclass")
+check_regression(fit.1, extra = TRUE)
+```
+
+(b) If the model contains a discrete quantitative explanatory variable, test for nonlinearity by specifying a model that treats this variable as a factor (e.g., using dummy regressors), and comparing that model via a likelihood-ratio test to the model that specifies that the variable has a linear effect. (If there is more than one discrete quantitative explanatory variable, then begin with a model that treats all of them as factors, contrasting this with a sequence of models that specifies a linear effect for each such variable in turn.) Note that this is analogous to the approach for testing for nonlinearity in a linear model with discrete explanatory variables described in Section 12.4.1.
+
+Answer:
+
+There is one discrete quantitative predictor 'income' in the model. From the anova outcome, it shows that p-value>0.05, i.e., we are unable to reject the null hypothesis, i.e., there is no lack of fit in terms of the linear assumption for the effect of 'income' predictor. We can say that the relationship between 'income' and logit of Y is linear.
+
+```{r}
+fit.1.f<-glm(vote~sex+education+statusquo+region*statusquo+sex*education+education*as.factor(income), family = binomial, data=df1)
+anova(fit.1, fit.1.f, test="LRT")
+```
+
+(c) Explore the use of the log-log and complementary-log-log links as alternatives to the logit link for this regression. Comparing deviances under the different links, which link appears to best represent the data?
+
+Answer:
+
+Since the original model (logit link) has the smallest residual deviance of 679.84, the logit link appears to best represent the data.
+
+```{r}
+fit.loglog<-glm(vote~sex+education+statusquo+region*statusquo+sex*education+education*income, family = binomial("cloglog"), data=df1)
+fit.cauchit<-glm(vote~sex+education+statusquo+region*statusquo+sex*education+education*income, family = binomial("cauchit"), data=df1)
+anova(fit.1, fit.loglog, fit.cauchit)
+```
+
+### **4. Exercise D15.1 (Count data)**
+
+Long (1990, 1997) investigates factors affecting the research productivity of doctoral students in biochemistry. Long's data (on 915 biochemists) are in the file `Long.txt`. The response variable in this investigation, `art`, is the number of articles published by the student during the last three years of his or her PhD programme.
+
+The explanatory variables are as follows:
+
+| Variable name | Definition                                                     |
+|---------------|----------------------------------------------------------------|
+| fem           | Gender: dummy variable - 1 if female, 0 if male                |
+| mar           | Maritial status: dummy variable - 1 if married, 0 if not       |
+| kid5          | Number of children five years old or younger                   |
+| phd P         | Prestige rating of PhD department                               |
+| ment          | Number of articles published by mentor during last three years |
+
+: *Explanatory variables in \`long.txt\` data*
+
+(a) Examine the distribution of the response variable. Based on this distribution, does it appear promising to model these data by linear least-squares regression, perhaps after transforming the response? Explain your answer.
+
+Answer:
+
+From the plot, we can see that the distribution of art seems to be a poisson distribution, i.e., after the log transformation, is possible to do linear regression, since log link is a common link function. 
+```{r}
+df4<-read.table("./data/Long.txt")
+hist(df4$art, freq = FALSE)
+```
+
+(b) Following Long, perform a Poisson regression of art on the explanatory variables. What do you conclude from the results of this regression?
+
+Answer:
+
+First, gender, mentor's publication numbers, marital status and kids are statistically significant.
+
+Second, to interpret the coefficients:
+
+female indicator: with other covariates fixed, the average numbers of articles published in last three years of female is e^(-0.224594)=0.7988403 (79.88%) of male's, i.e., about 20% less;
+
+mentor: when keep other covariates constant, if the mentor of the student have published one more article in the past 3 years, on average, the student tends to publish 1.026 times of articles, i.e., about 2.6% more;
+
+marital status: with other covariates fixed, the average numbers of articles published in last three years of people who are married is e^(0.155243)=1.1679420 (116.79%) of the unmarried's, i.e., about 16.79% more; Guess: being married is helpful to publishing articles?
+
+kid5: when keep other covariates constant, if the student have one more kids 5 years old or younger, on average, the student tends to publish 0.8312018 times of articles, i.e., about 18% less. Guess: it seems that taking care of young children might have negative effects on the productivity of students.(It needs further exploration, however)
+
+```{r}
+fit.poi<-glm(art~., data = df4, family = "poisson")
+summary(fit.poi)
+exp(summary(fit.poi)$coefficients[,1])
+```
+
+After adding interaction terms fem*mar and fem*kid5 into the model, we can see from the effect display plots that the effect of marriage is positive for both the gender while male seems to have higher baseline than female; the effect young kids is negative for both gender while female seem to be affected more (steeper slope). But due to the LRT, adding interactive terms doesn't seem to improve the model a lot.
+```{r}
+library(effects)
+df4$fem<-factor(df4$fem)
+df4$mar<-factor(df4$mar)
+fit.poi.2<-glm(art~fem+ment+mar+kid5+fem*mar+fem*kid5, data = df4, family = "poisson")
+plot(predictorEffects(fit.poi.2, ~mar, lines=list(multiline=TRUE))) # female*marrital 
+plot(predictorEffects(fit.poi.2, ~kid5, lines=list(multiline=TRUE))) # female*kid
+anova(fit.poi, fit.poi.2, test = "LRT")
+```
+
+(c) Perform regression diagnostics on the model fit in the previous question. If you identify any problems, try to deal with them. Are the conclusions of the research altered?
+
+Answer:
+
+- Influential data
+
+It seems that obs 186 is not only a high-leverage point, but also an influential point. Check with the data, we find that the other covariates seem to be normal while the mentor has published 77 articles in the last 3 years! Since 77 also seems to be an "outlier" in the "ment" distribution, i.e., much larger than the average level, I suspect that it's a wrong record, and 7 is more reasonable. But I decide to cancel it instead of changing its value (since I have no idea what the real number should be). 
+
+As for another influential point 467, it's not a high-leverage point, so it should be a poorly-fitted point. After checking it, it's obvious that it becomes an outlier simply because of its outstanding, i.e., both his publication number (19) and his mentor's publication number (42) are so amazing that distinguish him from the other students. Since his mentor is so productive, it's reasonable that this student has so many publications. But he still seems incompatible with this "average" model, thus, I decide to drop this data, too.
+
+```{r}
+#leverage point
+halfnorm(hatvalues(fit.poi))
+# Cook's distance
+plot(fit.poi, which = 4, id.n = 3)
+
+df4[c(186,467),]
+summary(df4$ment)
+summary(df4$art)
+```
+
+- Nonlinearity
+
+It seems that the linear combination of predictors is not reasonable, since the residual deviance plots have shown specific pattern. Thus, the model is lack of fit and we need to add nonlinear regressors into the model.
+
+```{r}
+library(arm)
+# predicted values
+x<-predict(fit.poi,type="link")
+y<-residuals(fit.poi)
+binnedplot(x,y,xlab=expression(hat(eta)),ylab="Deviance residuals")
+# mentor
+x<-df4$ment
+y<-residuals(fit.poi)
+binnedplot(x,y,xlab="mentor's publications",ylab="Deviance residuals")
+# income
+x<-df4$kid5
+y<-residuals(fit.poi)
+binnedplot(x,y,xlab="young kids' number",ylab="Deviance residuals")
+```
+
+After adjusting the model due to diagnostic, i.e., drop 2 observations and transform kid5 as a categorical variable, the coefficients' estimation and their signs haven't changed, which means, generally speaking, the previous conclusions hold for the adjusted model. The most significance difference is that the new model has shown different individual effects of 1, 2 and 3 young kids, and it's obvious that the negative effects of kid5 increase with the increase of the number of kids.
+
+```{r}
+df4.c<-df4[-c(186,467),]
+fit.poi.c<-glm(art~fem+ment+mar+as.factor(kid5), data = df4.c, family = "poisson")
+s.c<-summary(fit.poi.c)$coefficients
+s<-summary(fit.poi)$coefficients
+summary(fit.poi.c)
+s[,1] 
+s.c[,1]
+```
+(d) Refit Long's model allowing for overdispersion (using a quasi-Poisson or negative-binomial model). Does this make a difference to the results?
+
+Answer:
+
+Quasi-poisson doesn't seem to make any difference (why? so strange...), while negative-binomial model seems to decrease the deviance significantly.
+
+```{r}
+fit.qua<-glm(art~., data = df4, family = quasipoisson(link = "log"))
+fit.nb<-glm.nb(art~., data = df4)
+anova(fit.poi, fit.qua, fit.nb)
+```
