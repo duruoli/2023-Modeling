@@ -1,0 +1,594 @@
+---
+title: 'Final Exam-Appendix'
+subtitle: "STAT 353"
+author: "Duruo Li" #change to your name
+date: '2023/3/12'
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+editor_options: 
+  markdown: 
+    wrap: 72
+urlcolor: blue
+linkcolor: red
+---
+
+```{r setup, include=FALSE,warning=FALSE,message=FALSE,error=FALSE, fig.height=4, fig.width=6, fig.align = "center"}
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,error=FALSE,eval=FALSE)
+library(readr)
+library(pscl)
+library(ggplot2)
+library(dplyr)
+#read in the data
+data <- read_csv("data/SSOCS(2017-2018)Data.csv")
+
+```
+
+# An Overview of the Problem
+
+In the United States, gun violence in K-12 schools has grown rapidly over the past two decades. For example, the mass shooting at Uvalde Elementary in Texas (2022) received a large degree of media attention. While the scale of this event was extreme, however, gun violence of smaller scales is more [common](https://news.google.com/search?q=gun%20school&hl=en-US&gl=US&ceid=US%3Aen) .
+
+As gun violence increases, researchers and policymakers continue to search for solutions. These include ideas like increasing monitoring of social and mental health of students, using metal detectors, stationing police in schools, among others. This question - What can we do to reduce gun violence? - provides the background for this exam.
+
+## The SSOCS Data
+
+"The School Survey on Crime and Safety (SSOCS) — a nationally representative survey of U.S. K–12 public schools — is managed by the National Center for Education Statistics (NCES), an agency within the U.S. Department of Education’s Institute of Education Sciences. SSOCS collects detailed information from public schools on the incidence, frequency, seriousness, and nature of violence affecting students and school personnel. SSOCS also collects information on the programs, practices, and policies that schools have in place to prevent and reduce crime. Data from this collection can be used to examine the relationship between school characteristics and violent crimes in regular public primary, middle, high, and combined schools."
+
+All of the information that you need to understand this data is provided. This includes:
+
+ * `SSOCS(2017-2018)Data.csv` : The data
+ * `ssocs codebook.pdf` : The code book
+
+Notice that in the code book, the `Appendix A` includes the actual survey and that `Appendix B` includes a list of all the variable names and definitions. Further information on the creation of composite variables (those ending in "18") can be found in `Chapter 5`.
+
+(Throughout, pay particular attention to data with values of "-1". These are purposeful skips and in many (but not all) cases may need to be re-coded to "0".)
+
+## This Exam 
+
+The purpose of this exam is to test your ability to put to use all that you have learned in STAT 353 in the context of real data, with a real question. This involves combining your understanding of regression concepts and theory with the implementation of these in code and clear interpretation to a lay audience. Be sure to convey what the results tell you, what assumptions they require, and any limitations in your results. 
+
+For this exam, we will focus in particular on two outcomes:
+
+  - `INCID18` : total incidents of any crime
+  - `DISFIRE18` : total use of firearm or explosive
+
+To simply the analysis, you can ignore the sampling weights / jackknife replicates.
+  
+**Finally, a strong exam is one that is judicious in what is presented (you can put materials in an Appendix), that explains the decisions and assumptions that were made and why, that explains the how the results should be interpreted, and that is clear in any limitations.**
+
+
+# Part I. Testing Hypotheses
+
+As stated above, researchers and policymakers have hypothesized and enacted a variety of policies meant to reduce crimes and gun violence in schools. In particular, they often argue that schools should include *security guards* in order to reduce crime and gun violence.
+
+For this part, answer the following questions:
+
+1. After exploring the two outcomes (`INCID18` and `DISFIRE18`) determine what type of regression model is appropriate for each (e.g., OLS). Explain which is best and why.
+
+#ANSWER HERE
+
+- Crime(INCID18)
+
+Due to the histogram plot and the data type of INCID18, count data, negative binomial regression is a good guess.  
+
+Moreover, there might exist a zero-inflation problem. Since the encoding process of INCID18 shows that these "0s" can be regarded as true 0, i.e., there is no skip process like DISFIRE18, we could use two-step model, i.e., hurdle model.
+
+To test whether the zero-inflation issue has been fixed, make prediction and compare the number of predicted 0 with original data. It seems that negative binomial model is the best one, since the ration {#predicted 0}/{#original 0}= 0.89(raw nb)>0.73(hurdle nb)>0.69(mixture nb).
+
+Moreover, for raw negative binomial model the dispersion statistic is 1.17, i.e., closest to 1 compared with the other two.
+
+In conclusion, to fit INCID18, raw negative binomial model is the best. 
+
+- Gun violence(DISFIRE18:)
+
+The encoding of this variable is related to C0458, i.e., the total number if students involved in use/possession firearm/explosive device. When C0458 euqals 0, DISFIRE18 is encoded as -1 to represent the skip in other 4 related question. I re-code these -1 as 0.
+
+From the histogram and boxplot, we can see that there exists a severe zero-inflation problem, but it's different from INCID18, since most of the zeros are "false 0" (only 6 of them are "true 0" before re-encoding), i.e., if people answered the questions being skipped, DISFIRE18 might not be 0. Thus, we should use mixture model to fit the zero-inflation data.
+
+There also exists a super extreme data 81, which is much greater than all the other data, (the second largest is only 6). By checking the codebook, it's not a typing error, and I notice that other variables (e.g., DISWEAP18) of this individual are also extreme. But due to the codebook, the auther suggests that we can eliminate some extreme values if needed. Thus, I decide to rule out this individual data.
+
+After using zero-inflated poisson mixture model (ZIP), both the zero-inflation problem, ratio= predicted 0/original 0=0.98, and the overdispersion problem, dispersion statistic=1.09, have been fixed. 
+
+In conclusion, after re-encoding and eliminating an extreme value, the best model to fit DISFIRE18 is zero-inflated poisson (ZIP) mixture model.
+
+```{r}
+fire<-data$DISFIRE18
+fire[fire==0]
+```
+
+
+```{r hypothesis1}
+df1<-data
+crime<-df1$INCID18
+fire<-df1$DISFIRE18
+#re-encode
+fire[fire==-1]<-0
+df1$DISFIRE18<-fire
+
+#visualization
+par(mfrow=c(2,2))
+hist(crime, breaks = 70)
+hist(log(crime[crime!=0]), breaks = 70)
+hist(fire, breaks = 100)
+hist(fire[fire!=0], breaks = 100) #even drop
+par(mfrow=c(1,2))
+boxplot(crime)
+boxplot(fire)
+```
+```{r}
+summary(crime)
+summary(fire)
+```
+
+```{r}
+#possible influential point for DISFIRE18
+df1[,181:188] %>%
+  filter(DISFIRE18!=0) %>%
+  arrange(desc(DISFIRE18)) %>%
+  head() # 81>>6
+```
+
+```{r }
+#*1.1
+require(pscl) # alternatively can use package ZIM for zero-inflated models
+library(lmtest)
+library(MASS)
+library(performance)
+
+#negative binomial
+M1 <- glm.nb(INCID18 ~ SEC_FT18+SEC_PT18,
+          data = df1)
+
+summary(M1)
+
+#dispersion statistic
+E2 <- resid(M1, type = "pearson")
+N  <- nrow(df1)
+p  <- length(coef(M1))   
+sum(E2^2) / (N - p)
+
+check_zeroinflation(M1)
+
+fit.crime.nb<-M1
+```
+
+```{r}
+M2<-hurdle(INCID18 ~ SEC_FT18+SEC_PT18,
+          data = df1, dist = "negbin")
+summary(M2)
+E2 <- resid(M2, type = "pearson")
+N  <- nrow(df1)
+p  <- length(coef(M2))   
+sum(E2^2) / (N - p)
+check_zeroinflation(M2)
+```
+
+```{r}
+M3 <- zeroinfl(INCID18 ~ SEC_FT18+SEC_PT18 | ## Predictor for the Poisson process
+                 SEC_FT18+SEC_PT18, ## Predictor for the Bernoulli process;
+               dist = 'negbin',
+               data = df1)
+
+# Dispersion statistic
+E2 <- resid(M3, type = "pearson")
+N  <- nrow(df1)
+p  <- length(coef(M3))  
+sum(E2^2) / (N - p)
+
+check_zeroinflation(M3)
+```
+
+```{r}
+#*1.2
+#DISFIRE18
+df1.1<-df1 %>%
+  filter(DISFIRE18!=81)
+fit.fire.zip <- zeroinfl(DISFIRE18 ~ SEC_FT18 + SEC_PT18 | SEC_FT18 + SEC_PT18+FR_LVEL+FR_URBAN+FR_SIZE, ## Predictor for the Bernoulli process;
+               dist = 'poisson',
+               data = df1.1)
+summary(fit.fire.zip)
+# Dispersion statistic
+E2 <- resid(fit.fire.zip, type = "pearson")
+N  <- nrow(df1.1)
+p  <- length(coef(fit.fire.zip))  
+sum(E2^2) / (N - p)
+
+check_zeroinflation(fit.fire.zip)
+```
+2. Are the presence of *security guards* (`SEC_FT18` and `SEC_PT18`)  associated with reductions in crime (`INCID18`) and gun violence (`DISFIRE18`)? Interpret the effects clearly in language that a non-statistician could understand.
+
+`SEC_FT18`: total number of full-time security guards
+`SEC_PT18`: total number of part-time security guards
+
+#ANSWER HERE
+
+No, due to the output, "security guards" seems to associated with increase in crime and gun violence.
+
+For crime (INCID18), we can see that both the estimated coefficients for `SEC_FT18` and `SEC_PT18` are statistically significant, i.e., they do have relationships with crime counts, and they are positive, i.e., they are associated with increase in crime counts. 
+
+To interpret it more precisely, when keeping number of part-time security guards constant, if the school increase one people in full-time security guards, on average, the number of crime(incidents) will be e^0.123137, i.e., about 1.13 times the number before. Similarly, for part-time security guards, the increase is about 1.03 times. Moreover, the baseline number of crime is about 22. 
+
+As for gun violence (DISFIRE18), we can see that only full-time security guards `SEC_FT18` is statistically significant, i.e., is related with the variation of gun violence. Since it's a mixture model, there are two parts to interpret.
+
+For the prediction of whether being zero, both full-time and part-time security guards aren't significant, i.e., they are not related with (at least in terms of statistics) reporting zero in C0458, i.e., the total number if students involved in gun violence. The baseline odds is 527, which is very large, i.e., most schools are likely to not be involved in any gun violence. 
+
+Among schools which have probability to be involved in gun violence, increasing the full-time security guards by one people is related with 1.1 times increase in number of gun violence incidents.
+
+```{r hypothesis2}
+#*2.1
+summary(fit.fire.zip)
+exp(coef((fit.fire.zip)))
+#rownames(expCoef) <- names(coef(hurdlePart))
+# colnames(expCoef) <- c("Count_model","Zero_inflation_model")
+# expCoef
+summary(fit.crime.nb)
+exp(coef(fit.crime.nb))
+```
+
+3. To what extent do these effects differ in urban schools versus non-urban schools?
+
+#ANSWER HERE
+
+FR_URBAN: level of urbanicity (1-4) from city to rural, ubanicity decreases; I encode a new variable "urban", 1-3(city, suburb, town) as 1 (urban), while 4(rural) as 0(non-urban).
+
+To find the effect differences between urban and non-urban schools, I add interactions for security guards and urban indicator.
+
+- Crime
+
+Only full-time security guards and its interaction with urban indicator are significant. 
+
+Since the sign of SEC_FT18 hasn't changed, i.e., adding full-time security guards are still associated with the increase in crime. Since the interaction's coefficient is positive, in urban schools, this positive association is greater, i.e., compared with rural/non-urban schools, adding the same number of security guards is associated with more increase in crime.
+
+- Gun violence
+
+After adding urban*security guards interactions, in the count model, all of the coefficients are statistically significant. 
+
+Among all schools which have probability to be involved in gun violence, We can see that in rural schools, the effect of both full-time and part-time security guards are negative, i.e., adding security guards are associated with decrease in gun violence. However, for urban schools, the effects of security guards are positive, i.e., associated with the increase in gun violence.
+
+
+```{r hypothesis3}
+df1.2<-df1 %>%
+  mutate(urban=(!(FR_URBAN==4))*1)
+
+#df1.2[,c("FR_URBAN", "urban")]
+```
+
+```{r}
+#*3.1
+fit.crime.1<-glm.nb(INCID18 ~ SEC_FT18*urban+SEC_PT18*urban,
+          data = df1.2)
+summary(fit.crime.1)
+
+#*3.2.fire #level of urban (1-3)-urban; 4-rural
+fit.fire.1<-zeroinfl(DISFIRE18 ~ SEC_FT18*urban+SEC_PT18*urban | SEC_FT18 + SEC_PT18+FR_LVEL+FR_URBAN+FR_SIZE, ## Predictor for the Bernoulli process;
+               dist = 'poisson',
+               data = df1.2)
+# fit.fire.1<-zeroinfl(DISFIRE18 ~ SEC_FT18*factor(FR_URBAN)+SEC_PT18*factor(FR_URBAN) | SEC_FT18 + SEC_PT18+FR_LVEL+FR_URBAN+FR_SIZE, ## Predictor for the Bernoulli process;
+#                dist = 'poisson',
+#                data = df1.1)
+summary(fit.fire.1)
+exp(coef(fit.fire.1))
+
+```
+
+4.  Do your analyses suggest that policymakers are correct that security guards reduce crime and gun violence? If so, explain why. If not, conduct additional analyses (using regression) that allow you to evaluate their claim and interpret your results. 
+
+#ANSWERE HERE
+
+I'm not sure if there is a causal inference between adding security guards and crime and gun violence reduction. All of the variables are for 2017-18 school year, thus, it violates one of the three basic criteria for causation, i.e., if A causes B, A should precede B (temporal succession).
+
+And due to previous analysis, overall, their relationships are positive, but it doesn't mean that adding security guards will somehow lead to an increase in crime and violence, because it might be such a situation: schools which are involved in more crime or gun violence tend to invest more in security issues, e.g., increasing security guards, i.e., the causal relationship might be inverse.
+
+In conclusion, without further information, we are unable to decide whether the policymakers are correct or not.
+
+
+
+# Part II. Predicting Crime
+
+Other researchers and policymakers would like to develop a model to predict crime (`INCID18`) based upon observable school characteristics. Their idea is that they could first predict schools that have a lot of crime and then put in place interventions that could reduce such crime. 
+
+For this part, perform the following tasks. 
+
+1. For your first model, use variables `C0532`, `C0534`, `C0536`, `C0538`, `C0560`, `C0562`, `C0568`, `FR_LVEL`, `FR_URBAN`, and `FR_SIZE` as predictor variables. Be sure to pay attention to non-linearities and interactions. (In addition to Appendix B, you can find more detailed explanation for the variables `C0532` to `C0568` on pages 80-81 of the code book, and the three variables `FR_LVEL`, `FR_URBAN`, and `FR_SIZE` on page 172). How well does this model perform? 
+
+REMARK:
+`C0532` to `C0568`: school's students' characteristics; school situations (local crime)
+`FR_LVEL`, `FR_URBAN`, and `FR_SIZE`: overall school characteristics, school level (FR_LVEL), school locale (FR_LOC4), and enrollment size (FR_SIZE)
+
+#ANSWER HERE
+
+In comparison with intercept model, it certainly performs better. And using 6-fold cross validation, the raw and adjusted estimates for prediction error are 2084.297 and 1903.982, i.e., the model does not perform very well.
+```{r predict1}
+fit.pred.1<-glm.nb(INCID18 ~ (C0532 + C0534 + C0536 + C0538 + C0560 + C0562 + C0568 + FR_LVEL + FR_URBAN + FR_SIZE)^2, data = df1)
+summary(fit.pred.1)
+fit.pred.0<-glm.nb(INCID18 ~ 1, data = df1)
+anova(fit.pred.0, fit.pred.1)
+```
+```{r}
+# use AIC find the "best" model 
+# full<-fit.pred.1
+# base<-fit.pred.0
+# stepAIC(full, trace=FALSE, scope=list(upper=full, lower=base), direction="both")
+```
+
+```{r}
+library(boot)
+cv.err.1 <- cv.glm(df1, fit.pred.1, K = 6)$delta
+```
+```{r}
+cv.err.1
+```
+
+2. Create a new model that includes only those covariates that were statistically significant in (1), further refining this until all covariates in this model are statistically significant. How well does this model perform relative to Model (1)? 
+
+#ANSWER HERE
+
+According to different goodness-of-fit criteria, the comparisons are different.
+
+REMARK: ">" refers to "performs better"
+
+AIC: M1 > M2 (22658.63 < 22681.47)
+
+BIC: M1 < M2 (22996.28 > 22788.09)
+
+6-fold cross validation (adjusted prediction error): M1 < M2 (1405.102 > 1305.419)
+
+These two models' performances don't differ much due to these criteria, but since M2 has much less variables/parameters(18 v.s. 57), thus it's a more efficient model in terms of computation and is less likely over-fit new data, too. 
+
+In conclusion, Model (2) is likely to perform better than Model (1) in prediction.
+
+```{r predict2}
+# select only significant covariates
+toselect.x <- summary(fit.pred.1)$coeff[-1,4] < 0.05 # credit to kith
+# select sig. variables
+relevant.x <- names(toselect.x)[toselect.x == TRUE] 
+# formula with only sig variables
+sig.formula <- as.formula(paste("INCID18 ~",paste(relevant.x, collapse= "+"))) 
+
+fit.pred.2<-glm.nb(formula = sig.formula, data=df1)
+summary(fit.pred.2)
+```
+```{r }
+full<-fit.pred.2
+base<-glm.nb(formula = INCID18 ~ 1, data=df1)
+stepAIC(full, trace=FALSE, scope=list(upper=full, lower=base), direction="both")
+```
+
+```{r}
+# all variables siginificant
+fit.pred.2<-glm.nb(formula = INCID18 ~ C0534 + C0536 + C0538 + C0534:C0532 + 
+    C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_URBAN + C0536:C0538 + C0536:C0568 + 
+    C0536:FR_LVEL + C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE, 
+    data = df1)
+
+summary(fit.pred.2)
+```
+```{r}
+# the AIC best selected from raw model (not selected only significant var)
+fit.pred.1.1<-glm.nb(formula = INCID18 ~ C0532 + C0534 + C0536 + C0538 + C0560 + 
+    C0562 + C0568 + FR_LVEL + FR_URBAN + FR_SIZE + C0532:C0534 + 
+    C0532:C0538 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_LVEL + C0534:FR_URBAN + C0536:C0538 + 
+    C0536:C0560 + C0536:C0568 + C0536:FR_LVEL + C0536:FR_SIZE + 
+    C0538:FR_LVEL + C0560:FR_SIZE + C0562:FR_LVEL + C0562:FR_URBAN + 
+    FR_LVEL:FR_SIZE, data = df1)
+```
+
+```{r}
+#anova(fit.pred.1, fit.pred.2)
+cv.err.2<-cv.glm(df1, fit.pred.2, K = 6)$delta
+```
+```{r}
+AIC(fit.pred.1)
+AIC(fit.pred.2)
+```
+
+```{r}
+rbind(cv.err.1, cv.err.2)
+```
+
+3.  Develop and implement an approach to build the best model possible that predicts the total number of crimes (incidents, `INCID18`). (In addition to the variables mentioned in the previous problem, you may consider other variables, but be sure to explain your thinking.) 
+
+    What is your final model and why do you think it is the best?  Be sure to clearly explain your approach in language a non-statistician could understand.
+
+#ANSWER HRERE
+
+I decide to build a better model based on Model(2), and there are three directions to improve it:
+
+a. Rule out influential point
+
+I do some diagnostic analysis and find that there are some influential points, e.g., 822, 820, 995. 
+Influential points are "influential" in this way: if rule them out, the model's estimates will be changed greatly. Thus, they offer a "space" to improve the model. Since there are only a few of them (less than 10), I rule them out and re-fit the model using the same formula, but the accuracy of prediction doesn't seem to be improved significantly.
+
+Therefore, I pertain the original model M2.
+
+b. Add new parametric predictors 
+
+I choose several new variables in the dataset which might be associated with crimes in school.
+
+C0266-C0277: teacher's training to face violent issues
+
+C0279: whether there are people who are legally carry firearm
+
+C0690_R-C0393: the frequency of risky incidents happened in schools
+
+CRISI_18-FR_URBAN: composite variables about violence related issues in school and school characteristics. But after adding this part of variables, the prediction error has become much greater than before, thus, rule them out, perhaps because of over-fit.
+
+Then I use model step-wise selection method based on AIC, which is a criterion to measure the goodness of fit of models. 
+
+AIC contains punishment for too many parameters, i.e., if too many variables are included, although the model performs well on current data, the criterion might also give bad outcomes. The problem of having too many variables in model is that it might rely too much on current data and cannot "adapt to" new data, i.e., cannot give good predictions for future datasets. Thus, it's a good way to use AIC criterion to ease overfitting problem.
+
+Then I get a relative best parametric model M.p.
+
+c. Transform to non-parametric terms
+
+Generally, including non-parametric terms in models can lead to better predictions, because it will be much more flexible to have such terms. Intuitively, it's like we don't make any restrictions ahead of time, i.e., we give the variables enough freedom to capture the pattern of data by themselves, and they could use as many parameters as they like in order to best fit the relationships (pattern).
+
+At the same time, the drawback is obvious that the model might include too many parameters since those non-parametric variables are too "free" to add parameters. Overfitting, low computation efficiency, lack of interpretability have all become potential problems.
+
+In conclusion, I only add non-parametric terms for single-variable (not for interactions of multiple variables), but the fitting process is more like a rough guess based on rough assumptions, e.g., total number of serious violent incidents (SVINC18) might be related with crimes, etc., then check the 6-fold cv outcomes and decide whether we should add this term. Repeat the procedure until we have tried all of the variables we are interested in. 
+
+As for the evaluating method, 6-fold cv, intuitively speaking, it's a way to simulate future predictions for new data, which is a makeshift method. We will divide our current data into two parts, 5/6 of it is "new current data" which is used for training the model, and the rest of data (1/6) is used as "false new data" to check the prediction ability of the model. It's like create mock exams by ourselves, so that we can (hopefully) build a model which performs better in "real future exams".
+
+It turns out that semi-parametric model M.np performs much better than both based model and advanced parametric model (with a lot of new variables). 
+
+In the end, I also use cook's distance to do diagnostic. I find an influential point 1734 and rule it out, but it doesn't seem to improve the prediction much, i.e., the cv prediction error doesn't decrease significantly. Thus, I pertain the original model M.np.
+
+
+```{r predict3}
+# a. Influential point
+# based model, Model(2)
+# Diagnostic: influential data
+library(car)
+n<-dim(df1)[1]
+p<-18
+case<-c(1:n)
+
+# cook's distance
+plot(case, cooks.distance(fit.pred.2), type="l")
+text(case, cooks.distance(fit.pred.2))
+
+# DFFITS-rule
+# small to medium data: abs>1
+# large data: abs>2sqrt(p/n)
+
+plot(case, dffits(fit.pred.2), type="l")
+text(case, dffits(fit.pred.2))
+c<-2*sqrt(p/n)
+abline(h=c(-1,1), col=2)
+abline(h=c(-c,c), col=2, lwd=3)
+
+#summary diagnostic
+infIndexPlot(fit.pred.2, 
+     main="Diagnostic Plots")
+```
+
+```{r}
+df2<-df1[-c(822, 820, 995, 1189, 1491),]
+fit.pred.2.1<-glm.nb(formula = INCID18 ~ C0534 + C0536 + C0538 + C0534:C0532 + 
+    C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_URBAN + C0536:C0538 + C0536:C0568 + 
+    C0536:FR_LVEL + C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE, 
+    data = df2)
+
+cv.err.2.1<-cv.glm(df2, fit.pred.2.1, K = 6)$delta
+cbind(cv.err.2, cv.err.2.1)
+```
+
+```{r}
+# b. add variables
+# select sig. variables
+relevant.x <- colnames(df1[, c(97:109, 279, 124:140)])
+# formula with only sig variables
+sig.formula.p <- as.formula(paste("INCID18 ~ C0534 + C0536 + C0538 + C0534:C0532 + 
+    C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_URBAN + C0536:C0538 + C0536:C0568 + 
+    C0536:FR_LVEL + C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE+", paste(relevant.x, collapse= "+"))) 
+```
+
+```{r}
+M.p<-glm.nb(formula = sig.formula.p, 
+    data = df1)
+full<-M.p
+#stepAIC(full, trace=FALSE, scope=list(upper=full, lower=base), direction="both")
+# best model selected:
+# INCID18 ~ C0534 + C0536 + C0538 + C0266 + C0278 + 
+#     C0274 + IC0170 + C0690_R + C0705 + C0688 + C0374 + C0378 + 
+#     C0381 + C0383 + C0385 + C0382 + C0380 + C0384 + C0386 + C0393 + 
+#     C0534:C0532 + C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + 
+#     C0534:C0538 + C0534:FR_URBAN + C0536:C0538 + C0536:FR_LVEL + 
+#     C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE
+```
+
+```{r}
+M.p<-glm.nb(formula = INCID18 ~ C0534 + C0536 + C0538 + C0266 + C0278 + 
+    C0274 + IC0170 + C0690_R + C0705 + C0688 + C0374 + C0378 + 
+    C0381 + C0383 + C0385 + C0382 + C0380 + C0384 + C0386 + C0393 +
+    C0534:C0532 + C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + 
+    C0534:C0538 + C0534:FR_URBAN + C0536:C0538 + C0536:FR_LVEL + 
+    C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE, data = df1)
+# # select only significant covariates
+# toselect.x <- summary(M.p)$coeff[-1,4] < 0.1 # credit to kith
+# # select sig. variables
+# relevant.x <- names(toselect.x)[toselect.x == TRUE]
+# # formula with only sig variables
+# sig.formula.p<- as.formula(paste("INCID18 ~",paste(relevant.x, collapse= "+")))
+
+summary(M.p)
+cv.err.3.p<-cv.glm(df1, M.p, K = 6)$delta
+```
+
+```{r}
+rbind(cv.err.2.1, cv.err.3.p)
+```
+
+```{r }
+# b. semi-parametric model
+library(mgcv)
+set.seed(2)
+M.np<-gam(INCID18 ~ s(C0534) + s(C0536) + s(C0538) +s(SEC_FT18)+s(SEC_PT18)+s(DISALC18)+s(DISDRUG18)+ s(DISWEAP18)+ s(INCPOL18)+ s(VIOINC18)+ s(SVINC18) +C0534:C0532 + 
+    C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_URBAN + C0536:C0538 + C0536:C0568 + 
+    C0536:FR_LVEL + C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE, data = df1) 
+cv.err.3.np<-cv.glm(df1, M.np, K = 6)$delta
+```
+```{r}
+BIC(M.p)
+BIC(M.np)
+rbind(cv.err.2.1, cv.err.3.p, cv.err.3.np)
+```
+```{r}
+# Diagnostic: influential data
+n<-dim(df1)[1]
+p<-18
+case<-c(1:n)
+
+# cook's distance
+plot(case, cooks.distance(M.np), type="l")
+text(case, cooks.distance(M.np))
+
+```
+```{r}
+M.np<-gam(INCID18 ~ s(C0534) + s(C0536) + s(C0538) +s(SEC_FT18)+s(SEC_PT18)+s(DISALC18)+s(DISDRUG18)+ s(DISWEAP18)+ s(INCPOL18)+ s(VIOINC18)+ s(SVINC18) +C0534:C0532 + 
+    C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_URBAN + C0536:C0538 + C0536:C0568 + 
+    C0536:FR_LVEL + C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE, data = df1[-1734,]) 
+cv.err.3.np.1<-cv.glm(df1[-1734, ], M.np, K = 6)$delta
+```
+```{r}
+rbind(cv.err.2.1, cv.err.3.p, cv.err.3.np,cv.err.3.np.1)
+```
+
+4. Does your final model do a good job in predicting crime? Explain to a policymaker if and how they should properly use this model. 
+
+#ANSWER HERE
+
+My final model is a semi-parametric model including lots of variables showed in the following code chunk.
+
+Yes, due to the 6-fold cv prediction error, it performs much better than other models. Its adjusted prediction error is 313.2574, much smaller than that of both the original negative binomial regression model (1253.4348) and the advanced one (1738.4699).  Thus, it's supposed to do a good job in predicting crimes.
+
+But there are some caveats:
+
+- Overfitting:
+
+The model relies heavily on current dataset (which might be already out of time), thus, if policymakers want to make good prediction, they need to "feed" the model with most recent data available to re-train it.
+
+- Heterogeneity
+
+From previous analysis, we know that urban and non-urban schools, adding security guards has nonnegligibly different effects. Thus, when the policy makers want to figure out the prediction of crimes for certain schools, they should take the characteristics of the schools into account. In order to get best predictions, they should train the model with most "homogeneous" data, i.e., data of similar schools, e.g., in similar locations, have similar size, have similar student composition, etc..
+
+- Try simpler model?
+
+Since the model has included many variables, which might not be available in other datasets, it might be a practical choice to try other models as well, e.g., models with less predictors (more general predictors). Moreover, it's much more flexible to memorize the thoughts of this model (non-parametric, CV to estimate,...), and re-select variables according to new data.
+
+
+```{r }
+M.np<-gam(INCID18 ~ s(C0534) + s(C0536) + s(C0538) +s(SEC_FT18)+s(SEC_PT18)+s(DISALC18)+s(DISDRUG18)+ s(DISWEAP18)+ s(INCPOL18)+ s(VIOINC18)+ s(SVINC18) +C0534:C0532 + 
+    C0538:C0532 + C0532:FR_LVEL + C0534:C0536 + C0534:C0538 + 
+    C0534:C0568 + C0534:FR_URBAN + C0536:C0538 + C0536:C0568 + 
+    C0536:FR_LVEL + C0538:FR_LVEL + FR_LVEL:C0562 + FR_LVEL:FR_SIZE, data = df1) 
+```
+
