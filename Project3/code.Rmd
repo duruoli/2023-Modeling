@@ -1,0 +1,360 @@
+---
+title: 'STAT 353: Homework 3'
+author: "Duruo Li"
+date: "Feb 9 2023"
+output: html_document
+---
+
+```{r setup ,warning=FALSE,message=FALSE,error=FALSE, fig.height=4, fig.width=6, fig.align = "center"}
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,error=FALSE)
+```
+
+## Handwork
+
+*My policy on handwork is that it is required for Statistics PhD students and MS in Statistics students. It is encouraged (but not required) for MS in Applied Statistics and all other students. (If you are the latter, you will not get penalized if you get these wrong ... )*
+
+Exercises from the book: 17.1, 17.2, 18.3, 18.5
+
+You can type your answers and submit within this file *or* you can do this work on paper and submit a scanned copy (be sure it is legible).
+
+### 17.1
+```{r echo=FALSE, out.width = '80%'}
+knitr::include_graphics("HW3/1.jpg")
+```
+
+### 17.2
+```{r echo=FALSE, out.width = '80%'}
+knitr::include_graphics("HW3/2.jpg")
+```
+
+
+### 18.3
+
+Answer:
+
+From the plot, local linear regression estimator is less biased, because it shows smaller gaps between the true line and itself.
+
+And compared with kernel smoothing, local linear estimator shows better performance at the boundaries, because local weighted methods will be influenced by large-value points around.
+
+```{r}
+library(stats)
+set.seed(2)
+#simulated data
+x<-runif(100, 0, 100)
+e<-rnorm(100, 0, 20)
+y<-100-5*(x/10-5)^2+(x/10-5)^3+e
+
+
+f<-function(x){
+  y<-100-5*(x/10-5)^2+(x/10-5)^3
+  return(y)
+}
+
+x.seq<-seq(min(x), max(x), length.out = 100)
+# true line
+Ey<-100-5*(x.seq/10-5)^2+(x.seq/10-5)^3
+# local linear
+fit.18.ll<-loess(y~x, degree = 1, span = 0.4)
+
+y.ll.pred<-predict(fit.18.ll, data.frame(x=x.seq))
+
+
+plot(y~x)
+lines(x.seq, Ey, lwd=2)
+lines(x.seq, y.ll.pred, col="red", lty=2, lwd=2)
+#kernel regression/kernel smoothing
+lines(ksmooth(x, y, "normal", bandwidth = 18), col="green", lty=3, lwd=3)
+
+legend(67,-50, legend = c("true regression", "local-linear", "kernel smoothing"), col = c("black", "red", "green"), lty=c(1,2,3), cex=1 )
+```
+
+### 18.5
+
+Answer: 
+
+Span=0.3 leads to smallest ASE. 
+
+It kind of confirm my visual selection in 18.3, because when span value rises, the regression line first fits better and then worse, which corresponds with the pattern of the graph. But span=0.3 cause the fitted line to be a little too wiggly, thus, I choose span=0.4,  ACE doesn't differ so much, though. 
+```{r}
+ss<-seq(0.05, 0.95, by=0.05)
+n<-length(ss)
+n.y<-length(y)
+df.ase<-data.frame(span=ss, ASE=rep(0,n))
+Ey0<-100-5*(x/10-5)^2+(x/10-5)^3
+
+for (i in 1:n) {
+  sp<-ss[i]
+  fit<-loess(y~x, degree = 1, span = sp)
+  y.hat<-predict(fit)
+  df.ase[i,2]<-sum((y.hat-Ey0)^2)/n.y
+  
+}
+with(df.ase, plot(ASE~span))
+df.ase[which.min(df.ase$ASE),1]
+  
+```
+
+## Data analysis
+
+### **1. Exercise D17.1** 
+
+The data in `ginzberg.txt` (collected by Ginzberg) were analyzed by Monette (1990). The data are for a group of 82 psychiatric patients hospitalized for depression. The response variable in the data set is the patient's score on the Beck scale, a widely used measure
+of depression. The explanatory variables are "simplicity" (measuring the degree to which the patient "sees the world in black and white") and "fatalism". (These three variables have been adjusted for other explanatory variables that can influence depression.)
+
+Using the full quadratic regression model
+$Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + \beta_3X_1^2 + \beta_4X_2^2 + \beta_5X_1X_2 + \epsilon$
+regress the Beck-scale scores on simplicity and fatalism.
+
+(a) Are the quadratic and product terms needed here?
+
+Answer:
+
+Due to the scatterplots, it doesn't seem that there is quadratic relationship between depression and fatalism, but there might be non-linear relationship between depression and simplicity, but not quadratic.
+
+Due to the anova outcome, the interaction term is needed here, but the two quadratic terms don't seem needed. 
+
+p.s. Is it possible for a model to include higher terms without lower ones??  
+
+```{r}
+# polynomial regression
+library(car)
+df.g<-Ginzberg
+```
+```{r}
+# check the relationship intuitively
+scatterplot(adjdep~adjsimp, data=df.g)
+scatterplot(adjdep~adjfatal, data=df.g)
+```
+```{r}
+fit.0<-lm(adjdep~adjsimp+adjfatal, data = df.g)
+fit.1<-lm(adjdep~adjsimp+adjfatal+adjfatal*adjsimp+I(adjsimp^2)+I(adjfatal^2), data = df.g)
+fit.1.1<-lm(adjdep~adjsimp+adjfatal+adjfatal*adjsimp, data = df.g)
+fit.1.2<-lm(adjdep~adjsimp+adjfatal+I(adjsimp^2), data = df.g)
+fit.1.3<-lm(adjdep~adjsimp+adjfatal+I(adjfatal^2), data = df.g)
+#brief(fit.1) #brief summary of fit model
+summary(fit.1)
+anova(fit.0, fit.1)
+anova(fit.0, fit.1.1)
+anova(fit.0, fit.1.2)
+anova(fit.0, fit.1.3)
+fit.2<-fit.1.1
+```
+
+(b) If you have access to suitable software, graph the data and the fitted regression surface in three dimensions. Do you see any problems with the data?
+
+Answer: from the plot, we can see that there are some outlier points, and there is also an obvious high-leverage point. In this way, there might also be some influential points.
+
+```{r}
+# 3-dimensional plot; plane
+library("plot3D")
+x<-df.g$adjsimp
+y<-df.g$adjfatal
+z<-df.g$adjdep
+
+fitpoints<-fit.2$fitted.values
+grid.lines<-10
+x.pred<-seq(min(df.g$adjsimp),max(df.g$adjsimp), length.out = grid.lines)
+y.pred<-seq(min(df.g$adjfatal),max(df.g$adjfatal), length.out = grid.lines)
+xy <- expand.grid(adjsimp = x.pred, adjfatal = y.pred) # create grids of x-y
+z.pred <- matrix(predict(fit.2, newdata = xy), nrow = grid.lines, ncol = grid.lines) #should get predicted values of every grid of xy
+
+scatter3D(x, y, z, pch = 19, cex = 1, colvar = NULL, col="red", 
+          theta = 20, phi = 5, bty="b",
+          xlab = "simplicity", ylab = "fatalism", zlab = "depression",  
+          surf = list(x = x.pred, y = y.pred, z = z.pred,  
+                      facets = TRUE, fit = fitpoints, col=ramp.col (col = c("dodgerblue3","seagreen2"), n = 300, alpha=0.9), border="black"), main = "depression regression")
+```
+
+(c) What do standard regression diagnostics for influential observations show?
+
+Answer: 
+
+Due to Cook's distance, we know that point 71, 65, 80 are influential. From the added-variable plots, point 65 is influential to all of the three terms, while 80 only seems to affect "simplicity" term. But it's hard to tell how 71 will affect the regression lines if withdrawn.
+
+```{r}
+influenceIndexPlot(fit.2)
+influencePlot(fit.2, id.method="identify")
+avPlots(fit.2)
+```
+
+### **2. Exercise D18.2** 
+
+For this analysis, use the `States.txt` data, which includes average SAT scores for each state as the outcome.
+
+(a) Put together a model with SAT math (`SATM`) as the outcome and `region`, `pop`, `percent`, `dollars`, and `pay` as the explanatory variables, each included as linear terms. Interpret the findings.
+
+Answer:
+
+From the summary of this "pure" linear model, we can see that only "region" and "percent" are statistically significant. The $R^2$ shows that this model somehow has explained quite a large percentage (around 85%) of the variance of the response (SAT math). It seems to be a good fit if we just consider $R^2$. However, there is additional information from the crplots.
+
+We can see the partial relationships between SAT math score and "percent" is "perfectly" linear, but it seems that there exists some missing data in the middle? And the relationships between the response and "pop", "dollars", "pay" are seemingly non-linear, i.e., there exist certain patterns, the response-"pay"-pattern is less obvious, though. In other words, there could be some relationships between them and we cannot just "kick them out" before further validation.
+
+Thus, if we want to figure out the effect of covariates other than "region" and "percent", the data need to be re-fitted using non-linear regressors, e.g., non-parametric terms.  
+
+
+```{r}
+df.s<-States
+fit.lm<-lm(SATM~region+pop+percent+dollars+pay, data = df.s)
+fit.lm.1<-lm(SATM~region+percent, data = df.s)
+summary(fit.lm)
+anova(fit.lm.1, fit.lm)
+crPlots(fit.lm)
+```
+
+(b) Now, instead approach building this model using the nonparametric-regression methods of this chapter. Fit a general nonparametric regression model *and* an additive-regression model, comparing the results to each other and to
+the linear least-squares fit to the data (in (a)).
+
+Answer:
+
+The general nonparametric regression model and the additive-regression model both show that among all the numeric variables, "percent" is the only one which is statistically significant.
+
+And the additive-regression model (generalized version with a parametric part) gives the same result as the linear model, i.e., only "region"(regionWNC) and "percent" terms are statistically significant. From the plots of smooth terms, we can see "pay" and "pop" indeed don't show any relationships with SATM, while "dollar" has shown a relationship, with large variance, though.
+
+It seems that the population, the investment on public education, the salary of teachers are uncorrelated with students' SAT math score, or at least, cannot be modeled by local polynomial model and additive regression model.
+
+```{r}
+library(mgcv)
+library(stats)
+# general nonparametric regression model (I used to think this refers to Y^=f(x1,x2,..,xp))
+# local polynomial (<= 4 variables)
+fit.lp.0<-loess(SATM~pop+percent+dollars+pay, degree = 1, data = df.s)# degree: power of the highest polynomial term
+#summary(fit.lp.0) #show nothing...
+#find significant terms
+fit.lp.1<-loess(SATM~percent+dollars+pay, degree = 1, data = df.s)
+fit.lp.2<-loess(SATM~pop+dollars+pay, degree = 1, data = df.s)
+fit.lp.3<-loess(SATM~pop+percent+pay, degree = 1, data = df.s)
+fit.lp.4<-loess(SATM~pop+percent+dollars, degree = 1, data = df.s)
+anova(fit.lp.0, fit.lp.1)
+anova(fit.lp.0, fit.lp.2)#percent->significant
+anova(fit.lp.0, fit.lp.3)
+anova(fit.lp.0, fit.lp.4)
+
+fit.lp<-loess(SATM~percent, degree = 1, data = df.s)
+#plot fitted model
+plot(SATM~percent, data=df.s)
+ss<-with(df.s, seq(min(percent), max(percent), length.out = 200))
+satm.pred<-predict(fit.lp, data.frame(percent=ss))
+lines(ss, satm.pred, col="red")
+lines(with(df.s, smooth.spline(percent, SATM, df=3.85)), col="green") #smooth splines
+
+#fit.gen<-gam(SATM~s(percent), data = df.s)
+```
+
+```{r}
+# additive-regression model(semi-parametric in order to add "region")
+fit.add<-gam(SATM~region+s(pop)+s(percent)+s(dollars)+s(pay), data = df.s)
+summary(fit.add)
+plot(fit.add)
+```
+
+(c) Can you handle the nonlinearity by a transformation or by another parametric regression model, such as a polynomial regression? Investigate and explain. What are the tradeoffs between these nonparametric and parametric approaches?
+
+Answer:
+
+- Handle Nonlinearity
+
+I have tried log transformation for the response, and it doesn't seem to improve a lot. 
+
+Log transformation of "pop" seems to make it uncorrelated with the response, because the component-residual plot shows a seemingly random pattern around y=0. 
+
+As for "dollars" and "pay", neither log transformation nor adding polynomial terms seem to improve the fit, i.e., their relationships with SAT math couldn't be captured as "simple" parametric forms, maybe they are too complex. Or more likely, due to the original crPlots and the further results from non-parametric models, they do not have special relationships with SAT math.
+
+- Trade-off
+
+Interpretation: compared with parametric approaches, non-parametric methods are more flexible and fit the data better, but they are more difficult to interpret since the smoothers are usually very complicated. 
+
+Multivariate: general non-parametric models suffer from "the curse of dimensionality" and additive regression models are restricted to separate fitting for each explanatory variables; while parametric models are able to fit both separate effects and interactive effects
+
+Generalization: since non-parametric models rely more on the data, over-fitting is inevitable, i.e., they couldn't be generalized to other datasets easily. Conversely, although the parametric models cannot "please" the existing data well enough due to their "too-simple" structures, they are able to "adapt to" other datasets better. 
+
+p.s. semi-parametric methods seem to be the best......
+
+```{r}
+fit.lm.tr1<-lm(log(SATM)~region+pop+percent+dollars+pay, data = df.s)
+fit.lm.tr2<-lm(log(SATM)~region+pop+percent+dollars+pay, data = df.s)
+fit.lm.tr3<-lm(SATM~region+poly(pop,2, raw=TRUE)+percent+poly(dollars, 5, raw = TRUE)+poly(pay, 5, raw = TRUE), data = df.s)
+
+summary(fit.lm.tr1)
+summary(fit.lm.tr2)
+summary(fit.lm.tr3)
+crPlots(fit.lm.tr3)
+
+```
+
+### **3. Exercise D18.3**
+
+Return to the `Chile.txt` dataset used in HW2. Reanalyze the data employing generalized nonparametric regression (including generalized additive) models.
+
+(a) What, if anything, do you learn about the data from the nonparametric regression?
+
+Answer:
+
+From the several anova results, we can see that age, statusquo, education are the three statistically significant variables. The "statusquo" is the only one which has non-linear relationship (like polynomial, close to quadratic in the middle part) with the response "vote", but at borders, the variance is large.
+
+
+```{r}
+library(arm)
+library(dplyr)
+df.c<-Chile %>%
+  na.omit()
+fit.gam.0<-gam(vote~region+as.factor(population)+sex+s(age)+education+income+s(statusquo), family = binomial, data=df.c) #age, statusquo, education are significant
+
+fit.gam.1<-gam(vote~s(age)+education+s(statusquo), family = binomial, data=df.c)
+anova(fit.gam.1, fit.gam.0, test="Chisq")
+fit.gam.2<-gam(vote~age+education+s(statusquo), family = binomial, data=df.c)
+anova(fit.gam.2, fit.gam.1, test="Chisq")
+fit.gam.3<-gam(vote~s(age)+education+statusquo, family = binomial, data=df.c)
+anova(fit.gam.3, fit.gam.1, test="Chisq")
+
+fit.gam<-fit.gam.2
+```
+```{r}
+summary(fit.gam)
+plot(fit.gam)
+```
+
+
+(b) If the results appear to be substantially nonlinear, can you deal with the nonlinearity in a suitably respecified generalized linear model (e.g., by transforming one or more explanatory variables)?
+
+Answer:
+
+Yes, adding higher-order terms of "statusquo". If the degree of the polynomial is 3, from the anova, we can see that this model performs better than the non-parametric model. Thus, we have successfully fit the nonlinearity of the relationship.
+
+```{r}
+plot(vote~statusquo, data = df.c)
+fit.glm<-gam(vote~age+education+poly(statusquo, 3, raw = TRUE), family = binomial, data=df.c)
+anova(fit.glm, fit.gam, test="Chisq")
+```
+
+### **4. Exercise E18.7**
+
+For this analysis, use the `Duncan.txt` data. Here we are interested in the outcome `prestige` and the explanatory variable `income`.
+
+(a) Fit the local-linear regression of prestige on income with span $s = 0.6$ (see Figure 18.7 in the book). This has 5.006 equivalent degrees of freedom, very close to the number of degrees of freedom for a fourth order polynomial.
+
+```{r}
+library(car)
+df.d<-Duncan
+fit.ll<-loess(prestige ~ income, data = df.d, span = 0.6, degree = 1)
+summary(fit.ll)
+```
+
+(b) Fit a fourth order polynomial of the data and compare the resulting regression curve with the local-linear regression.
+
+Answer:
+
+From the plot, we can see the two fitted lines are similar until "income" value greater than 60. And fourth order polynomial regression is more "curved" at the right boundary.
+
+```{r}
+fit.p4<-lm(prestige ~ poly(income, 4, raw = TRUE), data = df.d)
+inc.200<-with(df.d, seq(min(income), max(income), length.out = 200))
+pred.ll<-predict(fit.ll, data.frame(income=inc.200))
+pred.p4<-predict(fit.p4, data.frame(income=inc.200))
+#anova(fit.ll, fit.p4, test="Chisq")
+
+plot(prestige~income, data = df.d)
+lines(inc.200, pred.ll, lty=1, lwd=2, col="red")
+lines(inc.200, pred.p4, lty=2, lwd=2, col="green")
+legend(5, 98, legend=c("local-linear regression", "4th order polynomial"),
+       col=c("red","green"), lty=1:2, cex=1)
+```
