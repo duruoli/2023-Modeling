@@ -1,0 +1,239 @@
+---
+title: 'STAT 353: Homework 1 (Review)'
+author: Duruo Li
+date: 2023/01/11
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this homework, you will review OLS regression. The concepts focused on here are obviously not all of what you know (from STAT 350), but they are concepts that are particularly important for this course. Pay particular attention to interpretation.
+
+# Data for this assignment
+
+For this assignment, we are using the `Duncan` dataset. This dataset provides data on the prestige and other characteristics of 45 U. S. occupations in 1950. The data was collected by the sociologist [Otis Dudley Duncan](https://en.wikipedia.org/wiki/Otis_Dudley_Duncan).
+
+# Preliminaries
+
+As a first step, we load the **car** package. This is the package developed by the author of our textbook and contains several useful functions and datasets, so we will be using it throughout this quarter.
+
+Begin by examining the first few rows of the `Duncan` data:
+
+```{r, warning=FALSE}
+library("car") # load car and carData packages
+head(Duncan, n=10)
+n<-dim(Duncan)[1]
+```
+
+Obtain summary statistics for the variables in `Duncan`:
+
+```{r}
+summary(Duncan)
+```
+
+As a first graph, we view a histogram of the variable `prestige`:
+
+```{r, fig.width=5, fig.height=5}
+with(Duncan, hist(prestige))
+```
+
+## 1. Examining the Data
+
+A first step for any analysis should include Exploratory Data Analysis (EDA). This allows you to check to see that you understand the variables - how they are coded, if they are factors or continuous, and if there are mistakes.
+
+The `scatterplotMatrix()` function in the **car** package produces scatterplots for all pairs of variables. A few relatively remote points are marked by case names, in this instance by occupation.
+
+```{r fig.height=8, fig.width=8}
+scatterplotMatrix(~ income + education + prestige | type, data=Duncan, id=TRUE,
+    regLine=FALSE, smooth=list(spread=FALSE))
+
+```
+
+Via the scatterplots above - and any other EDA you'd like to do - describe the data. What seems to be going on here?
+
+#Answer here
+
+1) For blue-collar group:
+
+Among all 3 groups, it has the lowest average income level, education level, and prestige level.
+
+In this group, income has positive correlation with both education and prestige, i.e., it seems that blue-collars who have higher income are likely to have higher education backgrounds and enjoy higher prestige. 
+
+Education also has an overall positive relationship with prestige, but not very significant, i.e., those who enjoy higher prestige level might not necessarily have high education level, or in other words, although most of the blue-collar workers don't have high education backgrounds, but there are still some of them who enjoy relatively high prestige.
+
+2) For white-collar group:
+
+Among all 3 groups, it has the medium average income level, education level, and prestige level. Income and education distribution both have unique peak while prestige distribution has 3 peaks, i.e, there are considerable number of white-collar workers who have prestige higher or lower than average level.
+
+In this group, for income and education, it seems that people with medium education level have lowest income, while those with either high or low education level have higher income; 
+
+for income and prestige, overall, the range of prestige level correlated with income is the smallest among the 3 groups, i.e., prestige doesn't vary so much among white-collar workers with different incomes as in other groups. And the relationship is not so simple. Those who have relatively high income don't necessarily enjoy high prestige (some with lower income enjoy higher prestige), but those who enjoy the highest prestige have relatively high-level income;
+
+for education and prestige, the relationship is also not linear and there is something rather unusual. For low-prestige and high-prestige range, it seems that people who have higher education level tend to have lower prestige level, while for medium-prestige range, this relationship is opposite, which accords with our intuition more.
+
+3) For professor group:
+
+Among all 3 groups, it has the highest average income level, education level, and prestige level. It is worth mentioning that there are a number of people in this group having relatively low education level.
+
+In this group, for all of the 3 pairs, the relationship is generally positive, which accords with our intuition. There is a small range of education level where people who have lower education level enjoy higher prestige level.
+
+
+
+
+## 2. Regression Analysis
+
+**A. Model 1**
+
+Use the`lm()` function to fit a linear regression model to the data, in which `education` and `income` are regressed on `prestige`.
+
+Interpret the findings from this model. Are education and income good explanations for an occupation's prestige? Interpret the coefficient for income - what does it mean? Does education or income have a larger effect on prestige? Justify your conclusion.
+
+#Answer here
+
+Coefficient for income: 0.59873
+
+It means that with a fixed level of education, an occupation's prestige will increase 0.59873 units on average when the income increases by 1 unit.
+
+Does education or income have a larger effect on prestige?
+
+No. We could not make any causal inference due to the regression outcomes, since it only shows the correlations between variables. I.e., even the coefficient of income is larger, it doesn't mean that income has a larger effect on prestige, since it could just be a coincidence that they change together.
+
+
+```{r}
+fit1<-lm(prestige~income+education, data = Duncan)
+summary(fit1)
+```
+
+
+**B. Model 2**
+
+Now, add in the `type` of occupation to the model. Is the model with `type` a better model? Explain what statistics you would use to make this decision, conduct the analysis, and interpret the results.
+
+#Answer here
+
+Yes.
+
+Statistics: F statistics
+
+$F=(\frac{SSE_{Reduce}-SSE_{Full}}{df_{Reduce}-df_{Full}})/\frac{SSE_{Full}}{df_{Full}}$
+
+
+```{r}
+fit2<-lm(prestige~income+education+type, data = Duncan)
+#summary(fit2)
+anova(fit1, fit2)
+```
+$H_{0}:$ The coefficients of variable "type" = 0 (since we have encoded "type" by 2 dummy variables, there are 2 coefficients
+
+$H_{\alpha}:$ At least one of the dummy variables' coefficient $\not =$ 0
+
+since the p-value of the F-test << 0.001, we have much confidence to reject H0, i.e., the new adding variable "type" obviously contributes to reducing the unexplained variance, i.e., if we use the principal that lower RSS (lower unexplained variability for y(prestige)) indicates a better fit, then we can say Model 2 with "type" is a better model. 
+
+## 3. Regression Diagnostics
+
+**A. Non-normality**
+
+The `rstudent()` function returns studentized residuals, and the `densityPlot()` function fits an adaptive kernel density estimator to the distribution of the studentized residuals. A `qqPlot()` can be used as a check for nonnormal errors, comparing the studentized residuals to a t-distribution.
+
+Use these to examine the results of your best model from Question 2. What do you conclude?
+
+#Answer here
+
+```{r fig.height=5, fig.width=5}
+p<-5
+n<-dim(Duncan)[1]
+densityPlot(rstudent(fit2))
+set.seed(1)
+t.values<-rt(n, df=n-1-p)
+qqplot(rstudent(fit2), t.values) #compare distributions other than normal dist
+abline(lm(sort(t.values)~sort(rstudent(fit2))), col=2)
+```
+From the qqplot and density plot of (external) studentized residuals, we can see that the external studentized residuals don't follow a t(n-p-1) distribution precisely (not even symmetric around 0), i.e., the normal assumption of error might be violated. Thus, corresponding statistical inference might be less reliable. And from the qqplot, we can also see that there exist some outliers in data. 
+
+However, since the size of the data is only 45, say relatively small, it's acceptable that the studentized residuals' distribution doesn't fit t-distribution so well.
+
+
+**B. Influence = outliers\*leverage**
+
+The `outlierTest()` function tests for outliers in the regression. The `influenceIndexPlot()` function creates a graph that displays influence measures in index plots. The `avPlots()` function creates added variable plots, which allow you to visualize how influential data points might be affecting (or not) the estimated coefficients.
+
+Using these (and/or other tools), using your preferred model from Question 2, are there any influential data points?
+
+If the diagnostics suggest that there are influential points, does removing these influential points change the results of the analysis? Compare models using the `compareCoefs()` function. What do you conclude?
+
+#Answer here
+
+1) Influential Points: minister and contractor
+
+From Bonferroni test (outcome of outlierTest()): minister is an outlier 
+
+From outcomes of influenceIndexPlot(): Cook's distance plot shows that minister and contractor are influential data points, other "special" points are either high-leverage points or outliers, but not influential. It's shown more clearly in influencePlot outcome, the size of the bubble represents cook's distance.
+
+From avPlots outcomes, we can figure out influential points by imagine how will the regression line change if we remove a "special" point. Contractor has an obvious influence on prestige|others~education|others; and minister has an obvious influence on prestige|others~income|others, while other points don't seem to have significant influence on regression lines if being removed.
+
+```{r, warning=FALSE}
+outlierTest(fit2)
+influenceIndexPlot(fit2)
+influencePlot(fit2, id.method="identify")
+avPlots(fit2)
+```
+
+2) Remove influential points
+
+Yes. Removing "minister" and "contractor" row has changed the regression coefficients, especially the intercept and the coefficient of dummy variable of professor type. 
+
+Thus, we conclude that they are indeed influential points and especially affect the relationship between professor type and prestige (diminish the range of co-change). Removing the influential points also decreases the "baseline"(0 income and 0 education) prestige of blue-collar workers.
+
+```{r}
+Duncan.r<-Duncan[!(row.names(Duncan) %in% c("minister","contractor")),]
+fit2.r<-lm(prestige~income+education+type, data = Duncan.r)
+compareCoefs(fit2, fit2.r)
+```
+
+
+
+**C. Non-linearity**
+
+Component-plus-residual plots allow for the detection of non-linearity in the partial relationship between each covariate and the outcome. These can be created using the `crPlots()` function.
+
+For your preferred model, does it appear there is any nonlinearity? Explain.
+
+#Answer here
+
+For income and education, there is no nonlinearity, since the loess lines (purple lines) are similar to the linear fit lines (blue lines). 
+
+To be more specific, the partial residual plots show the relationship between each covariate and the response variable while netting out other covariates' influence. The blue lines represent original fitted outcomes (the slope is just the linear regression models' coefficient respectively), while the purple lines show the "true" relationship between the predictor and response variable.
+
+As for the "type" covariate which is categorical, linearity could not be examined by the partial residual plot. 
+
+```{r fig.height=4, fig.width=8}
+crPlots(fit2)
+```
+
+**D. Heteroscedasticity**
+
+Non-constant error variance can be tested using the `ncvTest()` function.
+
+Does it appear that this is a concern with this data? Explain
+
+#Answer here
+
+No. For B-P Test, since the p-value>0.05, that we don't have strong evidence to reject the null hypothesis, i.e., we will regard the error terms having constant variance.
+
+```{r}
+ncvTest(fit2)
+```
+
+## 4. Interpretation
+
+Should the model above be used to answer a descriptive, explanatory, or predictive question? Explain your answer.
+
+#Answer here
+
+Descriptive question: Yes. Although there exist some influential points, the basic assumptions for linear regression model are roughly satisfied, i.e., it's an acceptable model to describe the Duncan dataset (the relationship between an occupation's prestige and other covariates).
+
+Explanatory question: No, we aren't able to conclude any causal relationship between independent and dependent variables.
+
+Predictive question: Not sure. Due to the previous procedures, we haven't used any test data to evaluate the model's prediction performance. 
