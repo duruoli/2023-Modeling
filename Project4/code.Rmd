@@ -1,0 +1,379 @@
+---
+title: 'STAT 353: Homework 3'
+author: "Duruo Li"
+date: "2023/2/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Handwork
+
+*My policy on handwork is that it is required for Statistics PhD students and MS in Statistics students. It is encouraged (but not required) for MS in Applied Statistics and all other students. (If you are the latter, you will not get penalized if you get these wrong ... )*
+
+Exercises from the book: 20.5, 20.10, 20.13, 21.4, 22.2
+
+You can type your answers and submit within this file *or* you can do this work on paper and submit a scanned copy (be sure it is legible).
+```{r echo=FALSE, out.width = '80%'}
+knitr::include_graphics("./1.jpg")
+knitr::include_graphics("./2.jpg")
+```
+### 21.4
+
+Answer:
+
+Set different random seed for original sampling, the bootstrap estimated bias is quite different.(then do two different bootstraps, seed=1 and 2)
+
+For seed=1, the bootstrap bias estimate for variance estimator is -5.324717 and -5.850933, which are quite different from theoretical value -10.
+
+For seed=2, the bootstrap bias estimate for variance estimator is -9.656419 and -10.05887, which is very close to the theoretical value -10.
+
+That's because the original sample size is so small that could cause great variance between different samples, i.e., n=10 sample is not a good representation of the whole normal population.
+```{r}
+library(boot)
+set.seed(2)
+sample<-rnorm(n=10, mean=0, sd=10)
+n<-10
+varfun<-function(data,i){
+  d<-data[i]
+  return(var(d)*(n-1)/n)
+}
+
+set.seed(1)
+boot.model.1<-boot(sample, varfun, R=500)
+boot.model.1
+
+set.seed(2)
+boot.model.2<-boot(sample, varfun, R=500)
+boot.model.2
+```
+
+```{r echo=FALSE, out.width = '80%'}
+knitr::include_graphics("./3.jpg")
+knitr::include_graphics("./4.jpg")
+```
+## Data analysis
+```{r setup ,warning=FALSE,message=FALSE,error=FALSE, fig.height=4, fig.width=6, fig.align = "center"}
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,error=FALSE)
+```
+### **1. Exercise D20.1 (MI)**
+
+Using the United Nations social-indicators data (in `UnitedNations.txt`), develop a regression model for the response variable female expectation of life. Feel free to use whatever explanatory variables in the data set make sense to you, and to employ variable transformations, methods of fitting the model other than least-squares regression (e.g., nonparametric), etc.
+
+(a) Work initially with complete cases, and once you have an apparently satisfactory model,obtain estimates and standard errors of the regression coefficients.
+
+Answer:
+
+There are only 39 observations left in the complete sample. I choose to use generalized additive model, and the deviance explained is 98.1%, and all the selected variables are statistically significant, so the model seems to be satisfying.
+
+Since we couldn't get coefficients for smooth terms, the following shows the estimate and standard error for parametric terms, including a categorical variable "region" (transformed into dummy variables) and numeric variable "lifeMale". 
+
+?Question:If set all terms to be nonparametric, will there be coefficient estimation issue?
+
+```{r}
+library(mgcv)
+library(stats)
+library(dplyr)
+df.un<-read.table("./data/UnitedNations.txt", stringsAsFactors=TRUE)
+#gam
+df.un.com<-df.un %>%
+  select(lifeFemale,region,lifeMale,infantMortality,economicActivityFemale) %>%
+  na.omit()
+fit.gam.0<-gam(lifeFemale~region+lifeMale+s(infantMortality)+s(economicActivityFemale), degree = 1, data = df.un.com)
+#coeftest()
+summary(fit.gam.0)
+```
+
+(b) Now redo your analysis in (a) but use multiple imputation.
+
+Answer:
+
+From the results, we can see the imputations are seemingly reasonable, i.e., feel like the imputed data follows the overall distribution.
+
+```{r}
+# multiple imputation
+library(mice)
+#md.pattern(df.un) #before imp, see the patterns of missing value
+df.un.ip<-mice(df.un, printFlag = FALSE, seed = 1) #default pmm(predictive mean matching)
+stripplot(df.un.ip, lifeMale, pch = 19, xlab = "Imputation number") #after imp, check imputation 
+```
+```{r}
+fit.gam.ip<-with(df.un.ip, gam(lifeFemale~region+lifeMale+s(infantMortality)+s(economicActivityFemale), degree = 1))
+summary(pool(fit.gam.ip))
+```
+
+(c) Compare these results to those from the complete-case analysis. What do you conclude?
+
+Answer:
+
+- Unchanged:
+
+From the regression results, the significance of independent variables haven't change, and the proportion of deviance explained hasn't changed much, either. Thus, imputation doesn't change the validity of the model setting (formula), which is reasonable since imputation aren't supposed to change the distribution of data much, i.e., won't change their relationships with dependent variable at a basic level. 
+
+- Changed:
+
+The estimation for coefficients of parametric terms have changed (not in sign, though). Thus, the missing parts do carry extra information, which is useful to estimate the relationships between dependent variables and the response variable. 
+
+In complete cases, "region" shows greater effects (absolute value of the coefficients), while "lifeMale" shows lower effects than imputation cases.
+
+Thus, to get more precise estimated effects of those factors on "female life expectation" (the response), we shouldn't just use the complete cases.
+
+```{r}
+summary(fit.gam.ip$analyses[[2]]) #check 2nd imputation's model 
+summary(pool(fit.gam.ip))
+summary(fit.gam.0)
+```
+
+### **2. Exercise D20.3 (Selection)**
+
+Long (1997) reports a regression in which the response variable is the prestige of the academic departments where PhDs in biochemistry find their first jobs. The data are in the file `Long-PhDs.txt`.
+
+Prestige is measured on a scale that runs from 1.00 to 5.00, and is unavailable for departments without graduate programs and for departments with ratings below 1.00. The explanatory variables
+include a dummy regressor for gender; the prestige of the department in which the individual obtained his or her PhD; the number of citations received by the individualís mentor; a dummy regressor coding whether or not the individual held a fellowship; the number of articles published by the individual; and the number of citations received by the individual.
+
+Estimate the regression of prestige of first job on the other variables in three ways:
+
+(a) code all of the missing values as 1.00 and perform an OLS regression;
+
+Answer:
+
+First, I use all the variables except for "job" as predictors.
+
+From the outcomes, we can see that OLS model doesn't perform very well (R^2 is small); "gender" and "articles" aren't statistically significant. Due to the F-test, we can see that these two factors could be removed according to their contribution to variance explanation.
+
+From the final model's outcomes, we can see that all the predictors seem to have positive correlations with first-job department's prestige.
+
+```{r}
+library(dplyr)
+df.nar<-read.table("./data/Long-PhDs.txt", stringsAsFactors=TRUE)
+df.nar.com<-df.nar %>%
+  replace(is.na(.), 1)
+fit.sl.lm.0<-lm(job~., df.nar.com)
+fit.sl.lm<-lm(job~phd+mentor+fellowship+citations, df.nar.com)
+anova(fit.sl.lm, fit.sl.lm.0) 
+summary(fit.sl.lm)
+```
+
+(b) treat the missing values as truncated at 1.00 and employ Heckmanís selection-regression model;
+
+Answer:
+
+Due to the outcomes, we find that only "phd"  and "citation" show statistical significance, and R^2 is smaller than OLS model.
+
+?Question:how to determine which factors should be used to predict selection indicators?
+```{r}
+# Heckman's sample selection model
+library(sampleSelection)
+df.sl.tb2<- df.nar %>%
+  mutate(job.f=!(is.na(job)))
+# truncation: assume "beyond-range" values are directly removed; truncated mean is higher than true mean <= the rest parts "equally" earn extra probability
+fit.sl.tb2<-selection(job.f ~ phd+fellowship+citations, job ~ phd+mentor+fellowship+citations,  method = '2step', data=df.sl.tb2) # 
+
+summary(fit.sl.tb2)
+#summary(fit.sl.lm)
+```
+
+```{r}
+# by hand (show the same outcomes)
+#1) selection equation
+#mills ratio: show the (relative) truncated prob 
+select.model<-glm(job.f ~ phd+fellowship+citations, family = binomial(link = "probit"), data = df.sl.tb2)
+pred.f<-predict(select.model)
+df.sl.tb2$imr<-dnorm(pred.f)/pnorm(pred.f)
+df.sl.tb2.h<-df.sl.tb2[df.sl.tb2$job.f,]
+#2) regression equation: use only observed data, but create a model which can be extrapolated
+fit.sl.tb2.h<-lm(job ~ phd+mentor+fellowship+citations+imr, data = df.sl.tb2.h)
+summary(fit.sl.tb2.h)
+```
+
+(c) treat the missing values as censored and fit the Tobit model.
+
+```{r}
+library(censReg)
+# tobit: specialized for censored data
+fit.cens<-censReg(job ~ phd+mentor+fellowship+citations, left=1, right=Inf, data=df.nar.com)
+summary(fit.cens)
+```
+
+(d) Compare the estimates and coefficient standard errors obtained by the three approaches. Which of these approaches makes the most substantive sense?
+
+Answer:
+
+Tobit model makes the most substantive sense.
+
+First, due to the backgrounds, the missing data doesn't miss completely at random, it's partly MAR and partly MNAR. Thus, it's inappropriate to replace NA with 1 and do the normal OLS regression, which will give biased estimations, and this is shown in the outcomes, i.e., coefficient estimates are relatively much different from the other 2 groups of results, especially for "phd" and "fellowship". 
+
+It seems that OLS method has underestimated the effects of phd department's prestige and whether or not possess a fellowship on first-job department's prestige. Thus, we can exclude the OLS method.
+
+Second, compared Heckman's selection regression with Tobit model, we can see that they give similar estimates (btw, not quite similar for those statistically insignificant variables), but Tobit model has more statistically significant variables and the estimates have smaller standard errors.
+
+In conclusion, Tobit model is the most reasonable approach for fitting the data.
+
+```{r}
+summary(fit.sl.lm)
+summary(fit.cens)
+summary(fit.sl.tb2)
+```
+
+### **3. Exercise (Bootstrap)**
+
+We will now consider the `Boston` housing dataset from the `MASS` package.
+
+```{r boston}
+data(Boston, package = "MASS")
+df.boot<-Boston
+```
+
+(a) Provide an estimate of the population mean of `medv`. Call this estimate $\hat{\mu}$.
+
+Answer:
+
+$\hat{\mu}$=$\bar{Y}=22.53281$
+
+```{r}
+n<-length(df.boot$medv)
+y.m<-mean(df.boot$medv)
+y.m
+```
+
+(b) What is the formula for the standard error of an estimate of the mean? Use this to provide an estimate of the standard error of $\hat{\mu}$ in (a).
+
+$SE=\sigma/\sqrt n$
+
+$\hat SE=S/\sqrt n$, $S^2=\frac{1}{n-1}\sum(Y_i-\bar Y)^2$
+
+$\hat {SE(\hat{\mu})}=0.4088611$
+```{r}
+#"Mix-type" estimation: theoretical+empirical
+# substitute population variance with sample variance
+se<-sd(df.boot$medv)/sqrt(n)
+se
+```
+
+
+(c) Estimate this standard error using the bootstrap. How does this compare to the answer from (b)?
+
+Answer:
+
+$\hat {SE(\hat{\mu})_{b}}=0.4085885$
+
+The two estimates are close to each other.
+```{r}
+#"Pure" estimation: empirical 
+# but the "substitute" step has been made at the beginning, substitute population with the only real sample
+library(boot)
+meanfun<-function(data,i){
+  d<-data[i,]
+  return(mean(d$medv))
+}
+boot(df.boot, meanfun, R=5000)
+```
+
+
+(d) Provide an estimate of $\hat{\mu}_{med}$, the  median value of `medv` in the population.
+
+Answer:
+
+$\hat{\mu}_{med}=21.2$
+```{r}
+median(df.boot$medv)
+```
+
+
+(e) Estimate the standard error of $\hat{\mu}_{med}$. Notice that there is no simple formula to do this, so instead use the bootstrap. Comment on your findings.
+
+Answer:
+
+$\hat {SE(\hat{\mu}_{med})_{b}}=0.3785667$
+
+The estimated standard error of $\hat{\mu}_{med}$ is smaller than that of mean estimator. Bootstrap is a direct way to simulate the distribution of statistics, and a useful way to analyze related statistical features. But there is a prerequisite that the sample should be good representation of the real population.
+```{r}
+library(boot)
+medianfun<-function(data,i){
+  d<-data[i,]
+  return(median(d$medv))
+}
+boot(df.boot, medianfun, R=5000)
+```
+
+
+### **4. Exercise D22.1 (Model Selection)**
+
+The data file `BaseballPitchers.txt` contains salary and performance data for major-league baseball pitchers at the start of the 1987 season. The data are analogous to those for baseball hitters used as an example in the chapter. Be sure to explore the data and think about variables to use as predictors before specifying candidate models.
+
+(a) Employing one or more of the methods of model selection described in the text, develop a regression model to predict pitchers' salaries.
+
+Answer:
+
+- Imputation: 
+
+If only use complete cases, we have to drop almost 15% of the data. Furthermore, the size of original data is small. Thus, I use multiple imputation method to impute the missing data, which majorly occurs in "salary". And the stripplot() outcomes show that the imputations seem to be reasonable.
+
+- Variable selection
+
+There are two kinds of variables. League and team information(1986, 1987 and overall career, i.e.,number of years in major leagues); and performance information (1986, and overall career).
+
+League and team, both historical ones and present ones could influence players' salary at a basic level; while performance information are important references to determine players' salaries.  Thus, it seems to me that all of the variables are possible predictors to predict 1987-salary for players.
+
+```{r}
+#a) imputation
+library(mice)
+library(dplyr)
+df.ms<-read.table("./data/BaseballPitchers.txt", stringsAsFactors=TRUE, header = TRUE)[,3:20]
+
+df.ms.com0 <- df.ms%>%
+  na.omit()
+df.ms.ip<-mice(df.ms, printFlag=FALSE, seed=1)
+stripplot(df.ms.ip, salary, pch = 19, xlab = "Imputation number") #after imp, check imputation 
+df1<-complete(df.ms.ip, action = 1, include = FALSE)
+```
+
+
+```{r}
+library(MASS)
+# c.1) step-wise
+base<-lm(salary~1, data=df1)
+full<-lm(salary~., data=df1)
+models<-stepAIC(full, trace=FALSE, scope=list(upper=full, lower=base),direction="both")
+fit.AIC<-lm(formula = salary ~ G86 + IP86 + SV86 + years + careerERA + 
+    league87 + team87, data = df1)
+summary(fit.AIC)
+#models$anova
+```
+
+(b) How successful is the model in predicting salaries? Does the model make substantive sense?
+
+Answer:
+
+Use 10-folds cross validation method, due to the outcomes, i.e., RMSE, R-squared, MAE, we can see that for both RMSE and MAE, the best model according to AIC method performs better than full model. Thus, we can regard it as a relatively successful model in predicting salaries.
+
+And as I have analyzed before, the chosen variables make a lot of sense. 
+
+- Present team and league (league87, team87): direct factors which influence salaries (immediate boss...)
+- Last year's performance (G86, IP86, SV86): most reliable references for players' ability
+- Overall career index (years, careerERA): long-term references
+
+```{r}
+# cross validation 10-folds
+# full model
+library(caret)
+#specify the cross-validation method
+ctrl <- trainControl(method = "cv", number = 10)
+model.full <- train(salary ~., data = df1, method = "lm", trControl = ctrl) #full model
+print(model.full)
+```
+
+```{r}
+#chosen model
+#specify the cross-validation method
+ctrl <- trainControl(method = "cv", number = 10)
+#fit a regression model and use k-fold CV to evaluate performance
+model <- train(salary ~ G86 + IP86 + SV86 + years + careerERA + 
+    league87 + team87, data = df1, method = "lm", trControl = ctrl)
+#view summary of k-fold CV               
+print(model)
+model$resample
+```
+
