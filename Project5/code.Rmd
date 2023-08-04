@@ -1,0 +1,464 @@
+---
+title: 'STAT 353: Homework 5'
+author: "Duruo Li"
+output: html_document
+---
+
+```{r setup ,warning=FALSE,message=FALSE,error=FALSE, fig.height=4, fig.width=6, fig.align = "center"}
+knitr::opts_chunk$set(warning=FALSE,message=FALSE,error=FALSE)
+```
+## Handwork
+
+*My policy on handwork is that it is required for Statistics PhD students and MS in Statistics students. It is encouraged (but not required) for MS in Applied Statistics and all other students. (If you are the latter, you will not get penalized if you get these wrong ... )*
+
+Exercises from the book: 23.2, 23.4
+
+You can type your answers and submit within this file *or* you can do this work on paper and submit a scanned copy (be sure it is legible).
+
+```{r echo=FALSE, out.width = '100%'}
+knitr::include_graphics("./1.jpg")
+knitr::include_graphics("./2.jpg")
+knitr::include_graphics("./3.jpg")
+```
+
+## Data analysis
+
+### **1. Exercise D23.2 (MLM)**
+
+The file `Snijders.txt` contains data on 4106 grade-8 students (who are approximately 11 years old) in 216 primary schools in the Netherlands. The data are used for several examples, somewhat different from the analysis that we will pursue below, by Snijders and Boskers in Multilevel Analysis, 2nd Edition (Sage, 2012).
+
+The data set includes the following variables: • `school`: a (non-consecutive) ID number indicating which school the student attends. • `iq`: the student's verbal IQ score, ranging from 4 to 18.5 (i.e., not traditionally scaled to a population mean of 100 and standard deviation of 15). • `test`: the student's score on an end-of-year language test, with scores ranging from 8 to 58. • `ses`: the socioeconomic status of the student's family, with scores ranging from 10 to 50. • `class.size`: the number of students in the student's class, ranging from 10 to 42; this variable is constant within schools, apparently reflecting the fact that all of the students in each school were in the same class. • `meanses`: the mean SES in the student's school, calculated from the data; the original data set included the school-mean SES, but this differed from the values that I computed directly from the data, possibly it was based on all of the students in the school. • `meaniq`: the mean IQ in the student's school, calculated (for the same reason) from the data.
+
+There are some missing data, and I suggest that you begin by removing cases with missing data. How many students are lost when missing data are removed in this manner? Then create and add the following two variables to the data set:
+
+-   `SES_c` : school-centred SES, computed as the difference between each student's SES and the mean of his or her school; and
+
+-   `IQ_c` : school-centred IQ.
+
+(a) Examine scatterplots of students' test scores by centered SES and centered IQ for each of 20 randomly sampled schools. Do the relationships in the scatterplots seem reasonable linear? *Hint: In interpreting these scatterplots, take into account the small number of students in each school, ranging from 4 to 34 in the full data set.*
+
+Answer:
+
+After removing missing data, 530 students are ruled out.
+
+From the scatterplots, the relationships between test scores and centered SES and centered IQ vary among different schools. For some of the schools, the relationships are linear, while for others, the relationships are more complex than linearity. 
+
+ However, considering that the sample size for each school isn't very large (at most 34 students in a school), the pattern shown in scatterplots might not be comprehensive, thus, it could be reasonable to model the Level 1 relationships as linear.
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+df0<-read.table("./data/Snijders.txt", stringsAsFactors=TRUE)
+df1<-df0 %>%
+  na.omit()
+dim(df0)[1]-dim(df1)[1]  
+
+df1<-df1 %>%
+  mutate(ses_c=ses-meanses) %>%
+  mutate(iq_c=iq-meaniq)
+```
+```{r}
+df1.n<-df1 %>%
+  group_by(school) %>%
+  summarise(n=n())
+
+summary(df1.n$n) #4-34
+```
+
+```{r}
+#sample 20 schools
+set.seed(2)
+school_ids<-sample(df1.n$school, size = 20)
+
+df1.sample<-df1 %>%
+  filter(school %in% school_ids)
+
+plot.ses<-ggplot(df1.sample, aes(x = ses_c, y = test)) +
+  geom_point() +
+  geom_smooth(method='lm', se=FALSE)+
+  geom_smooth(method = "loess", se=FALSE, col="red", lty=2)+
+  facet_wrap(~school)
+plot.ses
+
+```
+```{r}
+plot.iq<-ggplot(df1.sample, aes(x = iq_c, y = test)) +
+  geom_point() +
+  geom_smooth(method='lm', se=FALSE)+
+  geom_smooth(method = "loess", se=FALSE, col="red", lty=2)+
+  facet_wrap(~school)
+plot.iq
+```
+
+(b) Regress the students' test scores on centred SES and centred IQ within schools for the full dataset -- that is, compute a separate regression for each school. Then plot each set of coefficients (starting with the intercepts) against the schools' mean SES, mean IQ, and class size. Do the coefficients appear to vary systematically by the schools' characteristics (i.e., by the Level 2 explanatory variables centered SES, centered IQ, and class size)?
+
+Answer:
+
+For both intercept and coefficient for centered_IQ, they appear to vary systematically by school characteristics (contextual and compositional), the relationship is linear or more complex (e.g., polynomial). 
+
+For the coefficient of centered_SES, there is randomness in it, but it doesn't seem to have significant relationships with Level 2 explanatory variables.
+```{r}
+library(data.table)
+df1 <- data.table(df1)
+df1.coef<-df1[,as.list(coef(lm(test~ses_c+iq_c))),by=school]
+colnames(df1.coef)<-c("school", "intercept", "coef_ses_c", "coef_iq_c")
+df1.m<-df1 %>%
+  distinct(school,meanses, meaniq, class.size)
+
+df1.coef.c<-merge(df1.coef, df1.m, by="school")
+
+col_names<-colnames(df1.coef.c)
+```
+
+```{r}
+par(mfrow=c(3,3))
+for (i in 2:4) {
+  y<-col_names[i]
+  for (j in 5:7) {
+    x<-col_names[j]
+    plot <- ggplot(df1.coef.c, aes_string(x, y)) +
+    geom_point()+
+    geom_smooth(method='lm', se=FALSE)+
+    geom_smooth(method = "loess", se=FALSE, col="red", lty=2)+
+    ggtitle(paste(y,x,sep = "~"))
+    print(plot)
+  }
+  
+}
+```
+
+(c) Fit linear mixed-effects models to the Snijders and Boskers data, proceeding as follows:
+
+-   Begin with a one-way random-effects ANOVA of test scores by schools. What proportion of the total variation in test scores among students is between schools (i.e., what is the intra-class correlation)?
+
+Answer:
+
+variation due to schools: 18.27
+
+variation due to individuals after conditioning on school: 62.27
+
+Thus, the proportion of total variation in scores due to schools is 22.68%.
+```{r}
+# yij=a0i+eij
+# level 1: only intercept
+# a0i=b00+w0i
+# level 2: only intercept
+library(lme4)
+library(lmerTest)
+fit.00<-lmer(test~(1|school), data=df1)
+summary(fit.00)
+18.27/(18.27+62.27)
+```
+
+-   Fit a random-coefficients regression of test scores on the students' centered SES and centered IQ. Initially include random effects for the intercept and both explanatory variables. Test whether each of these random effects is needed, and eliminate from the model those that are not (if any are not). How, if at all, are test scores related to the explanatory variables? *Note: You may obtain a convergence warning in fitting one or more of the null models that remove variance and covariance components; this warning should not prevent you from performing the likelihood-ratio test for the corresponding random effects.*
+
+Answer:
+
+Due to the LRT, we can see that the random effect for ses_c is not needed, i.e., there is no obvious difference of ses's effect for test scores between schools. But the random effects for iq_c and intercept are needed.
+
+How are test scores related to the explanatory variables?
+
+The estimated intercept is the average test scores for all students. Within different schools, students have different average scores. And the deviation from overall average score, 40.84, follows N(0,20.873).
+
+As for ses_c, there is only fixed effect, i.e., for each student, the effect of ses_c is same. When centered ses score increases by one unit, the test score will increase 0.1736 on average. As for iq_c, there is a fixed effect and there is also a random effect i.e., when centered IQ increases by one unit, on average, the student's test score will increase by 2.237 plus a random value which follows N(0,0.2322), and for students in the same school, this random value is the same.
+
+
+```{r}
+fit.20<-lmer(test~1+ses_c+iq_c+(ses_c+iq_c|school), data=df1)
+summary(fit.20)
+```
+```{r}
+# significance test of explanatory vars' random effects
+rand(fit.20)
+```
+
+```{r}
+# significance of intercept's random effect
+fit.20.0<-lmer(test~1+ses_c+iq_c+(0+ses_c+iq_c|school), data=df1)
+anova(fit.20.0, fit.20, refit=FALSE)
+```
+```{r}
+# refit model
+fit.20.1<-lmer(test~ses_c+iq_c+(iq_c|school), data=df1)
+summary(fit.20.1)
+```
+
+-   Introduce mean school SES, mean school IQ, and class size as Level 2 explanatory variable, but only for the Level 1 coefficients that were found to vary significantly among schools in the random-coefficients model. *Hint: Recall that modeling variation in Level 1 coefficients by Level 2 explanatory variables implies the inclusion of cross-level interactions in the model; and don't forget that the intercepts are Level 1 coefficients that may depend on Level 2 explanatory variables. It may well help to write down the mixed-effects model first in hierarchical form and then in Laird-Ware form.* Test whether the random effects that you retained in the random-coefficients model are still required now that there are Level 2 predictors in the model. *Note: Again, you may obtain a convergence warning.*
+
+Answer:
+
+From the outcomes, we can see that class.size and the intercepts of meaniq:iq_c and class.size:iq_c aren't statistically significant, thus, we could rule them out.
+
+Due to the LRT of the re-fit model, the p-value=6.038e-06<<0.05, thus, the random effect for iq_c is still statistically significant (at significance level of 0.05), i.e., is still required.
+
+```{r}
+fit.13<-lmer(test~1+meanses+meaniq+class.size+ses_c+iq_c+meanses*iq_c+meaniq*iq_c+class.size*iq_c+(1+iq_c|school), data = df1)
+summary(fit.13)
+```
+```{r}
+fit.13.new<-lmer(test~1+meanses+meaniq+ses_c+iq_c+meanses*iq_c+(1+iq_c|school), data = df1)
+summary(fit.13.new)
+rand(fit.13.new)
+```
+
+-   Compute tests of the various main effects and interactions in the coefficients-as-outcomes model. Then simplify the model by removing any fixed-effects terms that are nonsignificant. Finally, interpret the results obtained for the simplified model. If your final model includes interactions, you may wish to construct effect displays to visualize the interactions.
+
+Answer:
+
+I've already done the selection step.
+
+- Interpretation
+
+For level 2 variables, meaniq, its estimated coefficient can be interepreted as if keep other variables fixed, when the average iq in school where the student belongs increases by one unit, the test score of the student is likely to increase by the estimated coefficient (on average). For meanses, the effect of it is (0.0875-0.02292*iq_c), i.e., for individuals with different iq_c, the effect of the school's average ses is different.
+
+Moreover, they are both compositional variables, whose effects include both within and between school parts.
+
+For level 1 variables, ses_c only has fixed effect, which can be interpreted as the effect of individual's centered ses. Since it has been centered, the effect is only the within-school effect.
+
+The effect of iq_c is more complex. The fixed part of iq_c part isn't strictly fixed, since with different meanses, the slope of iq_c is different, i.e., for students in different schools, the fixed effect of their iq on their test scores are different. Apart from the fixed effects, there is a random effect follows N(0, 0.2208) and is identical within the school. All in all, for students in the same school, the effect of their centered iq on their test scores is the same.
+
+The estimation of intercept -2.61694 is the average test score of all students, and for different schools, their average scores have a random deviation from -2.61694, and the deviation follows N(0, 8.86).
+
+- Visualize the interactions
+
+Since iq_s and meanses are both continuous variables, I choose 5-quantiles of each variable to show different effects of the other variable. For different level of meanses, iq_c seems to have distinct effects, while for different level of iq_c, meanses seems to have similar effects on test scores.
+```{r}
+summary(df1$iq_c)
+summary(df1$meanses)
+```
+
+```{r}
+summary(fit.13.new)
+library(effects)
+plot(predictorEffect("meanses", fit.13.new, xlevels=list(iq_c = c(-7.6820, -1.0657,  0.0000,  0.0293,  1.1520,  6.8260))))
+plot(predictorEffect("iq_c", fit.13.new, xlevels=list(meanses = c(10.00,   23.33,   27.86,   27.76,   32.11,   43.27))))
+```
+
+### **2. Exercise D23.2 (Binary version)**
+
+Repeat Problem (1) but now, instead of using `test` as the outcome, you will use a dichotomized version. To do so, create a new variable called `high_pass` that indicates if a student receives a score of 90% or above.
+
+```{r}
+library(lme4)
+library(lmerTest)
+quantile(df1$test, probs = 0.9)
+df2<-df1%>%
+  mutate(high_pass=(test>=52)*1)
+```
+
+
+Pay particular attention to interpretation and to how your results compare with those based on the continuous version. Are your results similar or do they differ? Explain why or why not.
+
+Answer:
+
+Due to the descriptive plots, we can find that there exist between-school differences.
+
+```{r}
+df2.n<-df2 %>%
+  group_by(school) %>%
+  summarise(n=n())
+#sample 20 schools
+set.seed(1)
+school_ids<-sample(df2.n$school, size = 12)
+
+df2.sample<-df2 %>%
+  filter(school %in% school_ids)
+
+ggplot(df2.sample, aes(factor(high_pass), y = ses_c , fill=factor(high_pass))) +
+  geom_boxplot() +
+  facet_wrap(~school, scales="free_y")
+
+ggplot(df2.sample, aes(factor(high_pass), y = iq_c , fill=factor(high_pass))) +
+  geom_boxplot() +
+  facet_wrap(~school, scales="free_y")
+```
+
+- Logistic Regression
+
+a. random-coefficients models
+  
+From the anova outcomes, we can see that neither of the random effects for iq_c and ses_c is     statistically significant, thus, we only keep the random effects for the intercept.
+
+From this perspective, the outcomes are already different from continuous response model, i.e., when only consider whether students are "high_pass", there is no systematic variation between the effects of students' ses or iq among different schools.
+
+
+```{r}
+fit.lg.20<-glmer(high_pass~1+ses_c+iq_c+(ses_c+iq_c|school), data = df2, family = binomial)
+fit.lg.20.1<-glmer(high_pass~1+ses_c+iq_c+(iq_c|school), data = df2, family = binomial)
+anova(fit.lg.20.1, fit.lg.20)
+```
+```{r}
+fit.lg.20.2<-glmer(high_pass~1+ses_c+iq_c+(ses_c|school), data = df2, family = binomial)
+anova(fit.lg.20.2, fit.lg.20)
+```
+
+b. coefficients-as-outcomes models
+  
+```{r}
+fit.lg<-glmer(high_pass~1+meanses+meaniq+class.size+ses_c+iq_c+meanses*iq_c+meaniq*iq_c+class.size*iq_c+(1+iq_c+ses_c|school), data = df2, family = binomial)
+
+```
+```{r}
+summary(fit.lg)
+```
+```{r}
+fit.lg.new<-glmer(high_pass~1+meanses+meaniq+ses_c+class.size*iq_c+(1+iq_c+ses_c|school), data = df2, family = binomial)
+```
+```{r}
+fit.lg.new.1<-glmer(high_pass~1+meanses+meaniq+ses_c+class.size*iq_c+(1+ses_c|school), data = df2, family = binomial)
+fit.lg.new.2<-glmer(high_pass~1+meanses+meaniq+ses_c+class.size*iq_c+(1+iq_c|school), data = df2, family = binomial)
+```
+```{r}
+anova(fit.lg.new.1, fit.lg.new)
+anova(fit.lg.new.2, fit.lg.new)
+```
+```{r}
+fit.lg.new.3<-glmer(high_pass~1+meanses+meaniq+ses_c+class.size*iq_c+(1|school), data = df2, family = binomial)
+anova(fit.lg.new.3, fit.lg.new)
+```
+```{r}
+fit.lg.new.4<-glmer(high_pass~1+meanses+meaniq+ses_c+class.size*iq_c+(0+iq_c+ses_c|school), data = df2, family = binomial)
+anova(fit.lg.new.4, fit.lg.new)
+```
+
+When selecting variables which have fixed effects, there are different ways to select, i.e., could have different interpretations. Due to AIC, the second model performs better. 
+
+To interpret, the intercept e^-11.85413 isn't the average odd ratio of test score for all students, since it's the value when meaniq equals 0. We can only get the average odd ratio of test scores for each school's students, i.e., e^(intercept+meaniq_i*coef1+random effect_i), i represents the ith school. Random effect follows N(0, 0.6369) and is a constant for each school.
+
+The other estimated coefficients for fixed-effect variables, e.g., meaniq, ses_c, iq_c, are just the similar interpretations as regular logistic regression. The only difference is meaniq is a Level-2 variable, and its coefficient represents compositional effects, i.e., includes both within and between school effects, i.e., the meaniq of a school affects its students' test scores at a higher level, and also indirectly affects scores by first affecting its students' iq, then affecting their test scores. 
+
+Since all the estimated coefficients are positive (apart from intercept), the effects are all positive.
+
+
+```{r}
+fit.lg.final<-glmer(high_pass~1+meanses+meaniq+ses_c+(1|school), data = df2, family = binomial)
+summary(fit.lg.final)
+```
+
+```{r}
+fit.lg.final2<-glmer(high_pass~1+meaniq+ses_c+iq_c+(1|school), data = df2, family = binomial)
+summary(fit.lg.final2)
+```
+```{r}
+#compare models by AIC
+extractAIC(fit.lg.final)
+extractAIC(fit.lg.final2)
+```
+
+### **3. Exercise D23.3 (Longitudinal)**
+
+Laird and Fitzmaurice ("Longitudinal Data Modeling," in Scott, Simonoff, and Marx, eds., The SAGE Handbook of Multilevel Modeling, Sage, 2013) analyze longitudinal data from the MIT Growth and Development Study on the change over time of percent body fat in 162 girls before and after menarch (age at first mentruation). The data are in the file `Phillips.txt`
+
+-   `subject`: subject ID number, 1---162.
+
+-   `age`: age (in years) at the time of measurement; the girls are measured at different ages, and although the measurements are approximately taken annually, the ages are not generally whole numbers.
+
+-   `menarche`: age at menarch (constant within subjects).
+
+-   `age.adjusted`: age − age at menarch.
+
+-   `body.fat`: percentage body fat at the time of measurement.
+
+Laird and Fitzmaurice fit a linear mixed-effects model to the data,
+
+$$
+Y_{ij} = \beta_1 +\beta_2 t_{ij-}+\beta _3 t_{ij+}+\delta _{1i}+\delta _{2i}t_{ij-}+\delta _{3i}t_{ij+}+\epsilon _{ij}  
+$$
+
+where
+
+• $Y_{ij}$ is the body-fat measurement for girl $i$ on occasion $j$;
+
+• $t_{ij-}$ is adjusted age prior to menarche and 0 thereafter;
+
+• $t_{ij+}$ is adjusted age after menarche and 0 before;
+
+• $\beta_1, \beta_2, \beta_3$ are fixed effects; and
+
+• $\delta_{1i}, \delta_{2i}, \delta_{3i}$ are subject-specific random effects.
+
+(a) Examine the data by plotting body fat versus adjusted age for all of the girls simultaneously; following Laird and Fitzmaurice, add a lowess smooth to the scatterplot. Now randomly select a subset (say, 30) of the girls and plot body fat versus adjusted age separately for each of the selected girls. What can you say about the apparent relationship between body fat and age before and after menarche? Is Laird and Fitzmaurice's model reasonable given your exploration of the data? Explain what each fixed-effect and random-effect coefficient in the model represents.
+
+Answer:
+
+- Relationships: body fat~adjusted age
+
+Roughly speaking, body fat decreases with age before menarche, while body fat increases with age after menarche. But there exists variation in trajectories among different subjects (girls).
+
+- Model setting
+
+Laird and Fitzmaurice's model seems to be reasonable. Because, there is a similar pattern in trajectories for different girls, which could be described by the fixed effects of adjusted age. At the same time, there are variations across different subjects' trajectories, which could be captured by the random effects for adjusted age and intercept. 
+
+Separating adjusted age into two parts is also reasonable, since there is an obvious distinction between the effect before and after menarche.
+
+- Coefficients explanation
+
+$\beta_1$: overall average body fat for all girls at the age at menarche.
+
+$\delta_{1i}$: the deviation from overall average body fat for each individual at the age at menarche, i.e., at the  age at menarche, girl i has $\beta_i+\delta_{1i}$ body fat.
+
+$\beta_2, \delta_{2i}$: before menarche, when a girl gets one year older, her body fat will **decrease** by $\beta_2+\delta_{2i}$ units. This effect is constant for individual across age, but varies across different girls.
+
+$\beta_3, \delta_{3i}$: before menarche, when a girl gets one year older, her body fat will increase by $\beta_3+\delta_{3i}$ units. This effect is constant for individual across age, but varies across different girls.
+
+
+```{r}
+df3<-read.table("./data/Phillips.txt", header = TRUE)
+#all girls
+ggplot(df3, aes(age.adjusted, body.fat)) +
+    geom_point()+
+    geom_smooth(method='lm', se=FALSE)+
+    geom_smooth(method = "loess", se=FALSE, col="red", lty=2, lwd=1.5)
+
+```
+
+```{r}
+# each of selected girls
+df3.n<-df3 %>%
+  group_by(subject) %>%  #get unique subject ids
+  summarise(n=n()) 
+
+set.seed(5)
+subject_ids<-sample(df3.n$subject, size = 30)
+
+df3.sample<-df3 %>%
+  filter(subject %in% subject_ids)
+ggplot(df3.sample, aes(x = age.adjusted, y = body.fat)) +
+  geom_point() +
+  geom_smooth(method = "loess", se=FALSE, col="blue", lty=2)+
+  facet_wrap(~subject)
+
+```
+
+(b) Fit the mixed-effects model as specified by Laird and Fitzmaurice. What do you conclude? Consider the possibility of dropping each of the random effects from the model.
+
+Answer:
+
+- conclusion
+
+The overall average body fat for all girls at the age at menarche is 0.5646, and the body fat for a specific girl i at the age at menarche is (0.5646+$\delta_{1i}$), $\delta_{1i}$~N(0,45.9414) and is a constant for the girl i. We can see that the random effect is very large, i.e., girls' body fat at the age at menarche vary greatly.
+
+The fixed effect for age prior to age at menarche is -0.4171, but since there is also a random effect following N(0, 1.6311), it's hard to tell whether the effect is positive or not, i.e., the effect of growing up on body fat vary across girls.
+
+But after age at menarche, the one-unit effect of growing older on body fat is (2.4643+$\delta_{3i}$), $\delta_{3i}$~N(0,0.8797), thus, we can almost be sure that the effect is positive, i.e., when a girl gets one year older after the age at menarche, her body fat is likely to increase by around 2.4643+$\delta_{3i}$ units.
+
+- dropping random effects
+
+Due to the LRT, we can see that the random effects for intercept, age_prior and age_post are all statistically significant, i.e., they have captured a lot of variation of the body fat, thus, it's unlikely to rule them out.
+
+```{r}
+df3.1<- df3 %>%
+  mutate(age_prior=(age.adjusted<0)*(-age.adjusted)) %>%
+  mutate(age_post=(age.adjusted>0)*(age.adjusted))
+
+```
+
+```{r}
+fit.long.0<-lmer(body.fat~1+age_prior+age_post+(1+age_prior+age_post|subject), data = df3.1)
+summary(fit.long.0)
+rand(fit.long.0)
+fit.long.1<-lmer(body.fat~1+age_prior+age_post+(0+age_prior+age_post|subject), data = df3.1)
+anova(fit.long.1, fit.long.0)
+```
+
